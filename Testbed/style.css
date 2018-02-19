@@ -1,0 +1,164 @@
+body {
+  font-family: snas-serif;
+}
+
+.fill_parent {
+  position:absolute;
+  left:0px;
+  right:0px;
+  top:0px;
+  bottom:0px;
+}
+
+.dock_bottom {
+  position:absolute;
+  left:0px;
+  right:0px;
+  bottom:0px;
+}
+
+.dock_top {
+  position:absolute;
+  left:0px;
+  right:0px;
+  bottom:0px;
+}
+
+.dock_left {
+  position:absolute;
+  left:0px;
+  top:0px;
+  bottom:0px;
+}
+
+.dock_right {
+  position:absolute;
+  top:0px;
+  bottom:0px;
+  right:0px;
+}
+
+
+.registerbox {
+	border: 1px solid black;
+font-family: 'DejaVu Sans Mono', "Consolas", "Droid Sans Mono", monospace;
+font-size: 20px/24px;
+width:800px;
+height:200px;
+position :relative;
+}
+.register {
+	display: inline-block;
+box-shadow: 0px 0px 1px 0px rgba(0,0,0,0.5);
+width: 84px;
+height: 22px;
+text-align: right;
+padding:3px;
+padding-right: 13px;
+}
+.register.changed {
+	color:red;
+}
+.register.sys { 
+position:relative;
+top:10px;
+}
+.control.panel {
+	width:480px;
+	background-color: rgba(0,0,0,0.1);
+	box-shadow: 0px 0px 1px 1px white inset;
+	text-align: center;
+}
+.button {
+	width:64px;
+}
+canvas {
+cursor:none;
+}
+.ttyoutput {
+	box-shadow: 0px 0px 1px 0px rgba(0,0,0,0.5);
+	position:absolute;
+	left:0px;
+	right:0px;
+	bottom:0px;
+	font-family: monospace;
+	font-size: 21px;
+	white-space: pre;
+}
+.log {
+	display:none;
+	position:absolute;
+	left:0px;
+	right:0px;
+	bottom:0px;
+	height:20%;
+	overflow:auto;
+	white-space:pre;	
+	padding:4px;
+	
+}
+.disassembly {
+	white-space: pre;
+	font-family: sans-serif;
+	position: absolute;
+	left:500px;
+	right:20px;
+	height:380px;
+	top:0px;
+	margin: 8px 0px;
+}
+
+.PC {
+	background-color: #f99;
+}
+.ProgramCounter {
+  background-color: #f99;
+}
+
+select {
+	display: block;
+	width : 300px;
+}
+
+.breakpoint {
+  position: absolute;
+  right: 4px;
+  bottom: 27px;
+  width: 34px;
+  text-align: right;
+  border: none;
+  box-shadow: 0px 0px 1px 1px rgba(0,0,0,0.5);
+	display:none;
+}
+
+.diagnostics {
+	display: block;
+}
+
+[tooltip]:before {
+	/* needed - do not touch */
+	content: attr(tooltip);
+	position: absolute;
+	opacity: 0;
+	
+	/* customizable */
+	transition: all 0.15s ease;
+	padding: 3px;
+	color: #333;
+	border-radius: 3px;
+	box-shadow: 2px 2px 1px silver;    
+	right:0px;
+
+}
+
+[tooltip]:hover:before {
+	/* needed - do not touch */
+	opacity: 0.8;
+	
+	/* customizable */
+	background: yellow;
+}
+
+[tooltip]:not([tooltip-persistent]):before {
+	pointer-events: none;
+}
