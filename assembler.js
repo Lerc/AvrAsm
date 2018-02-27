@@ -220,7 +220,7 @@ var directive = makeToken("directive",/^\.(?:macro|snippit|org|dw|db|use)\b/);
 var register = makeToken("register",/^(?:R|r)(?:[0-9]|[12][0-9]|3[01])\b/);
 var label = makeToken("label",/^\w+:/);
 var local = makeToken("local label",/^\.\w+:/);
-var pseudoRegister = makeToken("X,Y, or Z",/^(?:X|Y|Z)/);
+var pseudoRegister = makeToken("X,Y, or Z",/^(?:X|Y|Z|x|y|z)/);
 var localLabelName = makeToken("local label name",/^\.\w+/);
 var uint =  makeToken("Integer",/^\d+/);
 var hexint =  makeToken("Hex Value",/^((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/);
@@ -481,7 +481,7 @@ function assemble(code) {
       match(minus);
     }
     //console.log(look)
-    let pointer=match(pseudoRegister);
+    let pointer=match(pseudoRegister).toUpperCase();
     //note ("pointer "+source);
     
     if (look.token === plus) {
@@ -515,6 +515,23 @@ function assemble(code) {
     let source=regNumber(match(register));
     emit_LDST(pointer,source,preDec,postInc,offset,true);
     
+  }
+
+  function parse_lpm() {
+    let d=regNumber(match(register));;
+    match(comma);
+    let {pointer,preDec,postInc,offset} = parse_indexRegister();    
+    if (offset !=0) {
+      fail ("LPM does not support an offset")
+    }
+    if (pointer != "Z") {
+      fail ("LPM must use Z as a source")
+    }
+    if (preDec==true) {
+      fail ("LPM cannot pre-decrement Z")
+    }
+    let word = 0x9004 | (d << 4) | (postInc?1:0);
+    emitWord(word);
   }
 
   function parse_plain(instruction) {
@@ -902,6 +919,7 @@ function assemble(code) {
   }
   instructions.LD={parse:parse_ld};
   instructions.ST={parse:parse_st};
+  instructions.LPM={parse:parse_lpm};
   
   for (let op of op_plain) {    
     instructions[op].parse=parse_plain;
