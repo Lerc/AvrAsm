@@ -103,7 +103,7 @@ var avrInstructionEncodings = {
   SLEEP:  "1001 0101 1000 1000",
   //SPM:    "1001 0101 1110 1000",
   //ST is complex
-  STS:    "1001 001d dddd 0000 kkkk kkkk kkkk kkkk",
+  STS:    "1001 001r rrrr 0000 kkkk kkkk kkkk kkkk",
   SUB:    "0001 10rd dddd rrrr",
   SUBI:   "0101 KKKK dddd KKKK",
   SWAP:   "1001 010d dddd 0010",
@@ -123,7 +123,7 @@ var op_branchcc = "BRCC BRCS BREQ BRGE BRHC BRHS BRID BRIE BRLO BRLT BRMI BRNE B
 var sts_test = {
       base : [0x9200,0x0000], 
       parameters : {
-        d : { mask : [0x01f0, 0x0000], bits: 5 },
+        r : { mask : [0x01f0, 0x0000], bits: 5 },
         k : { mask : [0x0000, 0xffff], bits: 16}
       }
 }
@@ -217,10 +217,9 @@ function makeToken(kind,pattern) {
 
 var directive = makeToken("directive",/^\.(?:macro|snippit|org|dw|db|use)\b/);
 //var macro = makeToken("macro",/^[.]macro/);
+var register = makeToken("register",/^(?:R|r)(?:[0-9]|[12][0-9]|3[01])\b/);
 var label = makeToken("label",/^\w+:/);
 var local = makeToken("local label",/^\.\w+:/);
-
-var register = makeToken("register",/^(?:R|r)(?:[0-9]|[12][0-9]|3[01])\b/);
 var pseudoRegister = makeToken("X,Y, or Z",/^(?:X|Y|Z)/);
 var localLabelName = makeToken("local label name",/^\.\w+/);
 var uint =  makeToken("Integer",/^\d+/);
@@ -620,6 +619,40 @@ function assemble(code) {
     emitWords(instructionWord(instructions[instruction],{k,d}));   
   }
 
+  function parse_adiw(instruction) {
+    let d1 = regNumber(match(register));
+    match(colon);
+    let d = regNumber(match(register));
+
+    if ( (d+1 != d1)  ||  !([24,26,28,30].includes(d)) ) {
+      fail("register pair must be one of r25:r24   r27:r26   r29:r28   r31:r30 ")
+    }
+
+    match(comma);
+    let K=parse_intExpression();
+    if ((K<0) || (K>=64)) fail("constant must be within 0-63");
+    d=(d-24)>>1;
+    emitWords(instructionWord(instructions[instruction],{K,d}));   
+  
+  }
+
+  function parse_sbiw(instruction) {
+    let K=parse_intExpression();
+    if ((K<0) || (K>=64)) fail("constant must be within 0-63");
+    match(comma);
+
+    let d1 = regNumber(match(register));
+    match(colon);
+    let d = regNumber(match(register));
+
+    if ( (d+1 != d1)  ||  !([24,26,28,30].includes(d)) ) {
+      fail("register pair must be one of r25:r24   r27:r26   r29:r28   r31:r30 ")
+    }
+    d=(d-24)>>1;
+    emitWords(instructionWord(instructions[instruction],{K,d}));   
+  
+  }
+
   function parse_dw() {
     function check(v) {
       if ( (v > 65535) ||  (v < -32768)) fail("value must be 16 bit word, received:"+ v);
@@ -832,7 +865,7 @@ function assemble(code) {
         lineNumber+=1;
       }
       catch (e)  {
-        error("error on line "+ lineNumber+":  "+e.message);
+        error("error on line "+ lineNumber+":  "+e.message,lineNumber);
         throw e;
       }
     }  
@@ -841,7 +874,7 @@ function assemble(code) {
        usedSnippits.forEach(play_snippit) 
     }
     catch (e)  {
-      error("error on line "+ lineNumber+":  "+e.message);
+      error("error on line "+ lineNumber+":  "+e.message,lineNumber);
       throw e;
     }      
       
@@ -873,6 +906,9 @@ function assemble(code) {
   instructions.OUT.parse = parse_out;
   instructions.STS.parse = parse_sts;
   instructions.LDS.parse = parse_lds;
+  instructions.ADIW.parse = parse_adiw;
+  instructions.SBIW.parse = parse_sbiw;
+  
   doPass(1);
   doPass(2);
 
