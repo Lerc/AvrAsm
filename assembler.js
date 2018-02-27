@@ -2,7 +2,7 @@
 var avrInstructionEncodings = {
   ADC:    "0001 11rd dddd rrrr",
   ADD:    "0000 11rd dddd rrrr",
-  ADIW:   "1001 0110 KKdd KKKK", //*
+  ADIW:   "1001 0110 KKdd KKKK", 
   AND:    "0010 00rd dddd rrrr",
   ANDI:   "0111 KKKK dddd KKKK",
   ASR:    "1001 010d dddd 0101",
@@ -650,7 +650,27 @@ function assemble(code) {
     }
     d=(d-24)>>1;
     emitWords(instructionWord(instructions[instruction],{K,d}));   
-  
+  }
+  function parse_movw(instruction) {
+    let d1 = regNumber(match(register));
+    match(colon);
+    let d = regNumber(match(register));
+
+    match(comma);
+
+    let r1 = regNumber(match(register));
+    match(colon);
+    let r = regNumber(match(register));
+    if ( (d&1==1) || (r&1==1))
+      fail("second half of register pair must be an even numbered register");
+
+    if ( (d+1 != d1)  || (r+1 != r1)  ) {
+      fail("register pair must be r[n+1]:r[n] ")
+    }
+
+    d>>=1;
+    r>>=1;
+    emitWords(instructionWord(instructions[instruction],{r,d}));   
   }
 
   function parse_dw() {
@@ -908,6 +928,7 @@ function assemble(code) {
   instructions.LDS.parse = parse_lds;
   instructions.ADIW.parse = parse_adiw;
   instructions.SBIW.parse = parse_sbiw;
+  instructions.MOVW.parse = parse_movw;
   
   doPass(1);
   doPass(2);
