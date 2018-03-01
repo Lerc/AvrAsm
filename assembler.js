@@ -316,7 +316,9 @@ function assemble(code) {
     //note("add label "+id)
     if (labels.hasOwnProperty(id)) error ("duplicate label:  "+id);
     
-    labels[id] = {name: id, address:currentCodePosition()} 
+    let address=currentCodePosition()
+    labels[id] = {name: id, address} 
+    mathState[id]=address; 
   }
 
   function localLabelContext() {
@@ -328,7 +330,7 @@ function assemble(code) {
   function addLocalLabel(id) {
     if (pass!=1) return; 
     let fullName = localLabelContext()+id;
-    //note("add local label "+id+ "  as "+fullName)
+    note("add local label "+id+ "  as "+fullName)
     if (labels.hasOwnProperty(fullName)) error ("duplicate label:  "+id +" after "+previousLabel);
 
     labels[fullName] = {name: id, address:currentCodePosition()} 
