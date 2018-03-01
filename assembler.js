@@ -232,16 +232,26 @@ var plus =  makeToken("+",/^[+]/);
 var colon =  makeToken(":",/^[:]/);
 var bra =  makeToken("(",/^[(]/);
 var ket =  makeToken(")",/^[)]/);
+//var whitespace =  makeToken("whitespace",/^[ ]+/);
+
 var notsure =  makeToken("Don't know what this is",/^\s/);
 
 var endToken = {kind:"end"};
 
 function tokenizeLine (line) {
   var result =[];
+  result.text=line;
   var pos=0;
   var match;
   do  {
-    line=line.trimLeft();
+    match=/^\s+/.exec(line);
+    if (match) {
+      value=match[0];
+      pos+=value.length;
+      line=line.from(value.length);
+    }
+    //todo: match single and double quote spans
+    //todo: match out comments 
     for (let rule of rules) {
       match= rule.pattern.exec(line);
       if (match) {
@@ -250,8 +260,10 @@ function tokenizeLine (line) {
           console.log("zero length match", rule);
           return;
         }
-        result.push({token:rule, value});        
+        pos+=match.index;
+        result.push({token:rule, value,pos});        
         line=line.from(match.index+value.length);
+        pos+=value.length;
         break;
       }     
     }         
@@ -262,7 +274,7 @@ function tokenizeLine (line) {
 
 function assemble(code) {
   var lineNumber = 0;
-  var state={};
+  var mathState={};
   var instructions = {};
   var output = [];
   var map = {};
@@ -411,11 +423,11 @@ function assemble(code) {
       if (s[0]=="$") s=s.substr(1);        
       return parseInt(s,16);
     }
-    note("going to try an expression of : "+ line);
+    //note("going to try an expression of : "+ line);
     line=line.replace(/((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/g,hexToInt);
-    note("translated line: "+ line);
+    //note("translated line: "+ line);
     try {
-      var result=math.eval(line,state);
+      var result=math.eval(line,mathState);
       return result;
     }
     catch  (e) {
@@ -444,7 +456,7 @@ function assemble(code) {
         if (bracketDepth <0) fail ("no matching open bracket");
       } 
       line+=" "+match(look.token);
-      note( line );
+      //note( line );
     } while ( look.token!==comma || bracketDepth!==0);
     return(mathEval(line))        
   }
@@ -722,8 +734,10 @@ function assemble(code) {
 
       return;
     } 
-    if ( (look.token === equals) || (look.token === bra) ) {
-      var line=tokenList.from(tokenIndex-2).reduce( ((a,b)=>a+" "+b.value) ,"");
+    //if ( (look.token === equals) || (look.token === bra) ) {
+    if (true) {
+      //var line=tokenList.from(tokenIndex-2).reduce( ((a,b)=>a+" "+b.value) ,"");
+      var line = tokenList.text.from(tokenList[tokenIndex-2].pos);
       mathEval(line);
     } else {
       fail("coudn't figure out what "+look.value+" was doing here.")
@@ -957,8 +971,8 @@ function assemble(code) {
   doPass(1);
   doPass(2);
 
-  //console.log(state);
-  //note(JSON.stringify(state));
+  //console.log(mathState);
+  //note(JSON.stringify(mathState));
   //note(JSON.stringify(labels));
 
   for (let chunk of output) {
