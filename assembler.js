@@ -215,7 +215,7 @@ function makeToken(kind,pattern) {
   return result;
 }
 
-var directive = makeToken("directive",/^\.(?:macro|snippit|org|dw|db|use)\b/);
+var directive = makeToken("directive",/^\.(?:macro|endmacro|snip|endsnip|org|dw|db|use)\b/);
 //var macro = makeToken("macro",/^[.]macro/);
 var register = makeToken("register",/^(?:R|r)(?:[0-9]|[12][0-9]|3[01])\b/);
 var label = makeToken("label",/^\w+:/);
@@ -411,9 +411,9 @@ function assemble(code) {
       if (s[0]=="$") s=s.substr(1);        
       return parseInt(s,16);
     }
-    //note("going to try an expression of : "+ line);
+    note("going to try an expression of : "+ line);
     line=line.replace(/((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/g,hexToInt);
-    //note("translated line: "+ line);
+    note("translated line: "+ line);
     try {
       var result=math.eval(line,state);
       return result;
@@ -444,6 +444,7 @@ function assemble(code) {
         if (bracketDepth <0) fail ("no matching open bracket");
       } 
       line+=" "+match(look.token);
+      note( line );
     } while ( look.token!==comma || bracketDepth!==0);
     return(mathEval(line))        
   }
@@ -558,8 +559,8 @@ function assemble(code) {
     if (d<0) fail("instruction may only use r16-r31");
     
     match(comma);
-    let line=tokenList.from(tokenIndex-1).reduce( ((a,b)=>a+" "+b.value) ,"");
-    let K=mathEval(line);            
+    //let line=tokenList.from(tokenIndex-1).reduce( ((a,b)=>a+" "+b.value) ,"");
+    let K=parse_intExpression();            
     if ((K<-128) || (K>=256)) fail("constant 8 bit value expected");
     K&=0xff;
     emitWords(instructionWord(instructions[instruction],{d,K}));    
@@ -766,7 +767,7 @@ function assemble(code) {
   }
 
   function record_macro_line(line) {
-    if (line.trim()===".end" ) {
+    if (line.trim()===".endmacro" ) {
       macros[recordingMacro.name] = recordingMacro;
       //note("added macro "+recordingMacro.name+" of "+recordingMacro.lines.length+ " lines");
       lineParser=parse_standard_line;
@@ -804,9 +805,9 @@ function assemble(code) {
     //console.log(rx);
     for (let macroLine of macro.lines) {
       let translatedLine = macroLine.replace(rx,match=>parameters[match]);
-      note("macro translated line");
-      note("from:" +macroLine);
-      note("to  :" +translatedLine);
+      //note("macro translated line");
+      //note("from:" +macroLine);
+      //note("to  :" +translatedLine);
       assembleLine(translatedLine);
     }
     macroStack.pop();
@@ -822,8 +823,11 @@ function assemble(code) {
   }
 
   function record_snippit_line(line) {
-    if (line.trim()===".end" ) {
-      snippits[recordingSnippit.name] = recordingSnippit;
+    if (line.trim()===".endsnip" ) {
+      let name = recordingSnippit.name;
+      if (!snippits.hasOwnProperty(name)) snippits[name] = [];
+
+      snippits[name].push(recordingSnippit);
       //note("added snippit "+recordingSnippit.name+" of "+recordingSnippit.lines.length+ " lines");
       lineParser=parse_standard_line;
     }
@@ -833,10 +837,12 @@ function assemble(code) {
   }
 
   function play_snippit(snippit) {
-    lineNumber=snippit.lineNumber;
-    for (let line of snippit.lines) {
-      lineNumber+=1;
-      assembleLine(line);
+    for (let part of snippit) {
+      lineNumber=part.lineNumber;
+      for (let line of part.lines) {
+        lineNumber+=1;
+        assembleLine(line);
+      }
     }
   }
 
@@ -855,7 +861,7 @@ function assemble(code) {
       case ".dw":
         parse_dw();
         break
-      case ".snippit":      
+      case ".snip":      
         start_snippit();
         break;
       case ".use":

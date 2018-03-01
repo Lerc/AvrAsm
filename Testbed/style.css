@@ -98,6 +98,7 @@ cursor:none;
 	
 }
 .disassembly {
+	overflow:hidden;
 	white-space: pre;
 	font-family: sans-serif;
 	position: absolute;
@@ -113,6 +114,12 @@ cursor:none;
 }
 .ProgramCounter {
   background-color: #f99;
+}
+.Error {
+  background-color: #fbf;
+}
+.Error.ProgramCounter {
+  background-color: #0F0;
 }
 
 select {
@@ -162,3 +169,13 @@ select {
 [tooltip]:not([tooltip-persistent]):before {
 	pointer-events: none;
 }
+
+
+#assembler .CodeMirror {
+	height : 480px;	
+}
+
+#assembler .output {
+	height : 108px;	
+}
+
