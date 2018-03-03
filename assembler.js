@@ -333,7 +333,9 @@ function assemble(code) {
     note("add local label "+id+ "  as "+fullName)
     if (labels.hasOwnProperty(fullName)) error ("duplicate label:  "+id +" after "+previousLabel);
 
-    labels[fullName] = {name: id, address:currentCodePosition()} 
+    let address=currentCodePosition()
+    labels[fullName] = {name: id, address} 
+    mathState[fullName]=address; 
   }
 
   function findLabelAddress(id) {
