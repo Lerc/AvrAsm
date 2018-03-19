@@ -215,7 +215,7 @@ function makeToken(kind,pattern) {
   return result;
 }
 
-var directive = makeToken("directive",/^\.(?:macro|endmacro|snip|endsnip|org|dw|db|use)\b/);
+var directive = makeToken("directive",/^\.(?:macro|endmacro|include|snip|endsnip|org|dw|db|use)\b/);
 //var macro = makeToken("macro",/^[.]macro/);
 var register = makeToken("register",/^(?:R|r)(?:[0-9]|[12][0-9]|3[01])\b/);
 var label = makeToken("label",/^\w+:/);
@@ -272,12 +272,13 @@ function tokenizeLine (line) {
 }
 
 
-function assemble(code) {
+function assemble(mainFilename, loadFn) {
   var lineNumber = 0;
+  var fileNumber = 0;
   var mathState={};
   var instructions = {};
   var output = [];
-  var map = {};
+  var debugInfo = {fileList:[],addressMap:{}};
 
   var currentChunk = {};
   var labels = {};
@@ -294,14 +295,15 @@ function assemble(code) {
   }
 
   function initPass() {
-    lineNumber=1;
+    lineNumber=0;
+    fileNumber=0;
     macros={};
     snippits={};
     usedSnippits=new Set();
     macroStack = [];
     previousLabel = "_start_of_program_";
     output = [];
-    map={};
+    debugInfo={fileList:[],addressMap:{}};;
     newChunk();
   }
 
@@ -318,7 +320,7 @@ function assemble(code) {
     
     let address=currentCodePosition()
     labels[id] = {name: id, address} 
-    mathState[id]=address; 
+    mathState[id]=address*2; 
   }
 
   function localLabelContext() {
@@ -335,7 +337,7 @@ function assemble(code) {
 
     let address=currentCodePosition()
     labels[fullName] = {name: id, address} 
-    mathState[fullName]=address; 
+    mathState[fullName]=address*2; 
   }
 
   function findLabelAddress(id) {
@@ -836,7 +838,7 @@ function assemble(code) {
   function start_snippit() {
     let name = match(identifier);
     match(endToken);
-    recordingSnippit = {name,lines:[], lineNumber};
+    recordingSnippit = {name,lines:[], fileNumber, lineNumber};
     lineParser=record_snippit_line;
   }
 
@@ -857,6 +859,7 @@ function assemble(code) {
   function play_snippit(snippit) {
     for (let part of snippit) {
       lineNumber=part.lineNumber;
+      fileNumber=part.fileNumber;
       for (let line of part.lines) {
         lineNumber+=1;
         assembleLine(line);
@@ -871,10 +874,19 @@ function assemble(code) {
     usedSnippits.add(snippits[name]);
   }
 
+  function parse_include() {
+    console.log(look);
+    let includeName = look.value;
+    assembleFile(includeName);
+  }
+
   function parse_directive(kind) {
     switch (kind) {
       case ".macro":
         start_macro();
+        break;
+      case ".include":
+        parse_include();
         break;
       case ".dw":
         parse_dw();
@@ -911,15 +923,11 @@ function assemble(code) {
   }
 
   function assembleLine(line) {
-    map[currentCodePosition()]=lineNumber;
+    debugInfo.addressMap[currentCodePosition()]={lineNumber,fileNumber};
     lineParser(line);
   }
 
-  function doPass(passNum=1) {
-    pass=passNum;
-
-    initPass();
-    let lines = code.split('\n');
+  function assembleLines(lines) {
     for (let line of lines) {
       try {
         assembleLine(line);      
@@ -930,6 +938,27 @@ function assemble(code) {
         throw e;
       }
     }  
+  }
+
+  function assembleFile(filename) {
+    let lines = loadFn(filename).split('\n');
+    let store = [lineNumber,fileNumber];
+    console.log("assembling "+filename);
+    debugInfo.fileList.push(filename);
+    fileNumber=debugInfo.fileList.length-1;
+    console.log(debugInfo);
+    lineNumber=1;
+    assembleLines(lines);
+    [lineNumber,fileNumber] = store;
+  }
+
+  function doPass(passNum=1) {
+    console.log("pass: "+passNum);
+    pass=passNum;
+
+    initPass();
+    
+    assembleFile(mainFilename);
 
     try {
        usedSnippits.forEach(play_snippit) 
@@ -937,10 +966,9 @@ function assemble(code) {
     catch (e)  {
       error("error on line "+ lineNumber+":  "+e.message,lineNumber);
       throw e;
-    }      
-      
-
+    }           
   }
+
   instructions.LD={parse:parse_ld};
   instructions.ST={parse:parse_st};
   instructions.LPM={parse:parse_lpm};
@@ -982,6 +1010,6 @@ function assemble(code) {
   for (let chunk of output) {
     chunk.data = new Uint16Array(chunk.data);
   }
-  console.log(map)
-  return {output,map};
+  console.log(debugInfo)
+  return {output,debugInfo};
 }

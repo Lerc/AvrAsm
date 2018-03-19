@@ -1,5 +1,5 @@
 body {
-  font-family: snas-serif;
+  font-family: sans-serif;
 }
 
 .fill_parent {
@@ -179,3 +179,33 @@ select {
 	height : 108px;	
 }
 
+ul.tabs {
+	font-family: sans-serif;
+	list-style: none;
+	margin:0px;
+	background-color: #f3f3f5;
+	cursor:default;
+	box-shadow: 0px -1px 0px 0px inset;
+}
+
+ul.tabs li{
+display: inline-block;
+Border-top: 1px solid rgba(0,0,0,0.5);
+border-left: 1px solid rgba(0,0,0,0.5);
+border-right: 1px solid black;
+border-radius: 8px 8px 0px 0px;
+padding-left:5px;
+padding-right:5px;
+padding-top:3px;
+box-shadow: 3px 1px 2px -2px;
+
+}
+
+ul.tabs li.selected {
+	background-color: rgba(255,255,255,0.9);
+	margin-bottom : -3px;
+	padding-top:6px;
+	padding-left:6px;
+	padding-right:6px;
+	z-index: 1;
+}

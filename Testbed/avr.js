@@ -27,11 +27,23 @@ var AVR8 = function() {
 	this.outPortFunctions = _g2;
 	this.log = "";
 	this.breakPoint = 65535;
+	var _g3 = [];
+	var _g12 = 0;
+	while(_g12 < 65535) {
+		var i2 = _g12++;
+		_g3.push(null);
+	}
+	this.table = _g3;
 	this.ram = new Uint8Array(65536);
 	this.ramSigned = new Int8Array(this.ram.buffer);
 	this.ramAsWords = new Uint16Array(this.ram.buffer);
 	this.progMem = new Uint16Array(65536);
 	this.progMemAsBytes = new Uint8Array(this.progMem.buffer);
+	var _g4 = 0;
+	while(_g4 < 65535) {
+		var i3 = _g4++;
+		this.table[i3] = this.instructionAsFunction(i3);
+	}
 };
 AVR8.__name__ = true;
 AVR8.prototype = {
@@ -205,6 +217,1196 @@ AVR8.prototype = {
 		}
 		return result;
 	}
+	,_nop: function(_,__) {
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_cpse: function(d,r) {
+		var skipLength = 0;
+		if(this.ram[d] == this.ram[r]) {
+			var instruction = this.progMem[this.PC + 1];
+			if((instruction & 63488) != 36864) {
+				skipLength = 1;
+			} else if((instruction & 64527) == 36864) {
+				skipLength = 2;
+			} else if((instruction & 64524) == 37900) {
+				skipLength = 2;
+			} else {
+				skipLength = 1;
+			}
+		}
+		this.clockCycleCount += 1 + skipLength;
+		this.PC += 1 + skipLength;
+	}
+	,_cp: function(d,r) {
+		this.sub(this.ram[d],this.ram[r]);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_sub: function(d,r) {
+		this.ram[d] = this.sub(this.ram[d],this.ram[r]);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_adc: function(d,r) {
+		this.ram[d] = this.add(this.ram[d],this.ram[r],this.ram[95] & 1);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_and: function(d,r) {
+		var result = this.ram[d] & this.ram[r];
+		this.ram[d] = result;
+		var _g = this;
+		_g.ram[95] &= -31;
+		if((result & 128) != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 20;
+		}
+		if(result == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_eor: function(d,r) {
+		var result = this.ram[d] ^ this.ram[r];
+		this.ram[d] = result;
+		var _g = this;
+		_g.ram[95] &= -31;
+		if((result & 128) != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 20;
+		}
+		if(result == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_or: function(d,r) {
+		var result = this.ram[d] | this.ram[r];
+		this.ram[d] = result;
+		var _g = this;
+		_g.ram[95] &= -31;
+		if((result & 128) != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 20;
+		}
+		if(result == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_mov: function(d,r) {
+		this.ram[d] = this.ram[r];
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_movw: function(d,r) {
+		this.ramAsWords[d] = this.ramAsWords[r];
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_muls: function(d,r) {
+		var result = this.ramSigned[d] * this.ramSigned[r] & 65535;
+		this.ram[0] = result & 255;
+		this.ram[1] = (result & 65280) >> 8;
+		var _g = this;
+		_g.ram[95] &= -4;
+		if(result == 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 2;
+		} else if((result & 32768) == 32768) {
+			var _g2 = this;
+			_g2.ram[95] |= 1;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 2;
+	}
+	,_cpc: function(d,r) {
+		this.sub_with_carry(this.ram[d],this.ram[r],this.ram[95] & 1);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_sbc: function(d,r) {
+		this.ram[d] = this.sub_with_carry(this.ram[d],this.ram[r],this.ram[95] & 1);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_add: function(d,r) {
+		this.ram[d] = this.add(this.ram[d],this.ram[r]);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_cpi: function(d,k) {
+		var _g = this;
+		_g.ram[95] |= 2;
+		this.sub(this.ram[d],k);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_sbci: function(d,k) {
+		this.ram[d] = this.sub_with_carry(this.ram[d],k,this.ram[95] & 1);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_subi: function(d,k) {
+		this.ram[d] = this.sub(this.ram[d],k);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_ori: function(d,k) {
+		this.ram[d] |= k;
+		var result = this.ram[d];
+		var _g = this;
+		_g.ram[95] &= -31;
+		if((result & 128) != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 20;
+		}
+		if(result == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_andi: function(d,k) {
+		this.ram[d] &= k;
+		var result = this.ram[d];
+		var _g = this;
+		_g.ram[95] &= -31;
+		if((result & 128) != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 20;
+		}
+		if(result == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_std_y: function(q,d) {
+		this.memStore(this.ram[28] + (this.ram[29] << 8) + q,this.ram[d]);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_std_z: function(q,d) {
+		this.memStore(this.ram[30] + (this.ram[31] << 8) + q,this.ram[d]);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_ldd_y: function(d,q) {
+		this.ram[d] = this.memLoad(this.ram[28] + (this.ram[29] << 8) + q);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_ldd_z: function(d,q) {
+		this.ram[d] = this.memLoad(this.ram[30] + (this.ram[31] << 8) + q);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_in: function(d,a) {
+		this.ram[d] = this.memLoad(a + 32);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_out: function(a,d) {
+		this.memStore(a + 32,this.ram[d]);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_rjmp: function(k,_) {
+		var nextPC = this.PC + k + 1;
+		this.clockCycleCount += 2;
+		this.PC = nextPC;
+	}
+	,_rcall: function(k,_) {
+		var nextPC = this.PC + k + 1;
+		var value = this.PC + 1;
+		var _g = this;
+		var _g1 = _g.ram[93] + (_g.ram[94] << 8);
+		var value1 = _g1 - 1;
+		_g.ram[93] = value1 & 255;
+		_g.ram[94] = value1 >> 8 & 255;
+		this.ram[_g1] = value & 255;
+		var _g2 = this;
+		var _g11 = _g2.ram[93] + (_g2.ram[94] << 8);
+		var value2 = _g11 - 1;
+		_g2.ram[93] = value2 & 255;
+		_g2.ram[94] = value2 >> 8 & 255;
+		this.ram[_g11] = value >> 8;
+		this.clockCycleCount += 3;
+		this.PC = nextPC;
+	}
+	,_ldi: function(d,k) {
+		this.ram[d] = k;
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_brbs: function(bit,k) {
+		if((this.ram[95] & bit) != 0) {
+			this.PC = this.PC + k + 1;
+			this.clockCycleCount += 2;
+		} else {
+			this.PC += 1;
+			this.clockCycleCount += 1;
+		}
+	}
+	,_brbc: function(bit,k) {
+		if((this.ram[95] & bit) == 0) {
+			this.PC = this.PC + k + 1;
+			this.clockCycleCount += 2;
+		} else {
+			this.PC += 1;
+			this.clockCycleCount += 1;
+		}
+	}
+	,_bld: function(d,bit) {
+		if((this.ram[95] & 64) != 0) {
+			this.ram[d] |= bit;
+		} else {
+			this.ram[d] &= ~bit;
+		}
+		this.PC += 1;
+		this.clockCycleCount += 1;
+	}
+	,_bst: function(d,bit) {
+		if((this.ram[d] & bit) != 0) {
+			var _g = this;
+			_g.ram[95] |= 2;
+		} else {
+			var _g1 = this;
+			_g1.ram[95] &= -3;
+		}
+		this.PC += 1;
+		this.clockCycleCount += 1;
+	}
+	,_sbrc: function(d,bit) {
+		if((this.ram[d] & bit) == 0) {
+			var instruction = this.progMem[this.PC + 1];
+			var skipLength = (instruction & 63488) != 36864 ? 1 : (instruction & 64527) == 36864 ? 2 : (instruction & 64524) == 37900 ? 2 : 1;
+			this.PC += 1 + skipLength;
+			this.clockCycleCount += 1 + skipLength;
+		} else {
+			this.clockCycleCount += 1;
+			this.PC += 1;
+		}
+	}
+	,_sbrs: function(d,bit) {
+		if((this.ram[d] & bit) != 0) {
+			var instruction = this.progMem[this.PC + 1];
+			var skipLength = (instruction & 63488) != 36864 ? 1 : (instruction & 64527) == 36864 ? 2 : (instruction & 64524) == 37900 ? 2 : 1;
+			this.PC += 1 + skipLength;
+			this.clockCycleCount += 1 + skipLength;
+		} else {
+			this.clockCycleCount += 1;
+			this.PC += 1;
+		}
+	}
+	,_lds: function(d,_) {
+		var k = this.progMem[this.PC + 1];
+		this.ram[d] = this.memLoad(k);
+		this.clockCycleCount += 2;
+		this.PC += 2;
+	}
+	,_ld_z_p: function(d,_) {
+		this.ram[d] = this.memLoad(this.ram[30] + (this.ram[31] << 8));
+		var _g = this;
+		var value = _g.ram[30] + (_g.ram[31] << 8) + 1;
+		_g.ram[30] = value & 255;
+		_g.ram[31] = value >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_ld_p_z: function(d,_) {
+		var _g = this;
+		var value = _g.ram[30] + (_g.ram[31] << 8) - 1;
+		_g.ram[30] = value & 255;
+		_g.ram[31] = value >> 8 & 255;
+		this.ram[d] = this.memLoad(this.ram[30] + (this.ram[31] << 8));
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_lpm_z: function(d,_) {
+		this.ram[d] = this.progMemAsBytes[this.ram[30] + (this.ram[31] << 8)];
+		this.clockCycleCount += 3;
+		this.PC += 1;
+	}
+	,_lpm_z_p: function(d,_) {
+		this.ram[d] = this.progMemAsBytes[this.ram[30] + (this.ram[31] << 8)];
+		var _g = this;
+		var value = _g.ram[30] + (_g.ram[31] << 8) + 1;
+		_g.ram[30] = value & 255;
+		_g.ram[31] = value >> 8 & 255;
+		this.clockCycleCount += 3;
+		this.PC += 1;
+	}
+	,_elpm_z: function(d,_) {
+		this.ram[d] = this.progMemAsBytes[this.ram[91] << 16 | this.ram[30] + (this.ram[31] << 8)];
+		this.clockCycleCount += 3;
+		this.PC += 1;
+	}
+	,_elpm_z_p: function(d,_) {
+		this.ram[d] = this.progMemAsBytes[this.ram[91] << 16 | this.ram[30] + (this.ram[31] << 8)];
+		var _g = this;
+		var value = _g.ram[30] + (_g.ram[31] << 8) + 1;
+		_g.ram[30] = value & 255;
+		_g.ram[31] = value >> 8 & 255;
+		if(this.ram[30] + (this.ram[31] << 8) == 0) {
+			var _g1 = this;
+			_g1.ram[91] += 1;
+		}
+		this.clockCycleCount += 3;
+		this.PC += 1;
+	}
+	,_ld_y_p: function(d,_) {
+		this.ram[d] = this.memLoad(this.ram[28] + (this.ram[29] << 8));
+		var _g = this;
+		var value = _g.ram[28] + (_g.ram[29] << 8) + 1;
+		_g.ram[28] = value & 255;
+		_g.ram[29] = value >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_ld_p_y: function(d,_) {
+		var _g = this;
+		var value = _g.ram[28] + (_g.ram[29] << 8) - 1;
+		_g.ram[28] = value & 255;
+		_g.ram[29] = value >> 8 & 255;
+		this.ram[d] = this.memLoad(this.ram[28] + (this.ram[29] << 8));
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_ld_x: function(d,_) {
+		this.ram[d] = this.memLoad(this.ram[26] + (this.ram[27] << 8));
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_ld_x_p: function(d,_) {
+		this.ram[d] = this.memLoad(this.ram[26] + (this.ram[27] << 8));
+		var _g = this;
+		var value = _g.ram[26] + (_g.ram[27] << 8) + 1;
+		_g.ram[26] = value & 255;
+		_g.ram[27] = value >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_ld_p_x: function(d,_) {
+		var _g = this;
+		var value = _g.ram[26] + (_g.ram[27] << 8) - 1;
+		_g.ram[26] = value & 255;
+		_g.ram[27] = value >> 8 & 255;
+		this.ram[d] = this.memLoad(this.ram[26] + (this.ram[27] << 8));
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_pop: function(d,_) {
+		var _g = this;
+		var value = _g.ram[93] + (_g.ram[94] << 8) + 1;
+		_g.ram[93] = value & 255;
+		_g.ram[94] = value >> 8 & 255;
+		this.ram[d] = this.ram[this.ram[93] + (this.ram[94] << 8)];
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_sts: function(d,_) {
+		var k = this.progMem[this.PC + 1];
+		this.memStore(k,this.ram[d]);
+		this.clockCycleCount += 2;
+		this.PC += 2;
+	}
+	,_st_z_p: function(d,_) {
+		this.memStore(this.ram[30] + (this.ram[31] << 8),this.ram[d]);
+		var _g = this;
+		var value = _g.ram[30] + (_g.ram[31] << 8) + 1;
+		_g.ram[30] = value & 255;
+		_g.ram[31] = value >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_st_p_z: function(d,_) {
+		var _g = this;
+		var value = _g.ram[30] + (_g.ram[31] << 8) - 1;
+		_g.ram[30] = value & 255;
+		_g.ram[31] = value >> 8 & 255;
+		this.memStore(this.ram[30] + (this.ram[31] << 8),this.ram[d]);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_st_y_p: function(d,_) {
+		this.memStore(this.ram[28] + (this.ram[29] << 8),this.ram[d]);
+		var _g = this;
+		var value = _g.ram[28] + (_g.ram[29] << 8) + 1;
+		_g.ram[28] = value & 255;
+		_g.ram[29] = value >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_st_p_y: function(d,_) {
+		var _g = this;
+		var value = _g.ram[28] + (_g.ram[29] << 8) - 1;
+		_g.ram[28] = value & 255;
+		_g.ram[29] = value >> 8 & 255;
+		this.memStore(this.ram[28] + (this.ram[29] << 8),this.ram[d]);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_st_x: function(d,_) {
+		this.memStore(this.ram[26] + (this.ram[27] << 8),this.ram[d]);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_st_x_p: function(d,_) {
+		this.memStore(this.ram[26] + (this.ram[27] << 8),this.ram[d]);
+		var _g = this;
+		var value = _g.ram[26] + (_g.ram[27] << 8) + 1;
+		_g.ram[26] = value & 255;
+		_g.ram[27] = value >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_st_p_x: function(d,_) {
+		var _g = this;
+		var value = _g.ram[26] + (_g.ram[27] << 8) - 1;
+		_g.ram[26] = value & 255;
+		_g.ram[27] = value >> 8 & 255;
+		this.memStore(this.ram[26] + (this.ram[27] << 8),this.ram[d]);
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_push: function(d,_) {
+		this.ram[this.ram[93] + (this.ram[94] << 8)] = this.ram[d];
+		var _g = this;
+		var value = _g.ram[93] + (_g.ram[94] << 8) - 1;
+		_g.ram[93] = value & 255;
+		_g.ram[94] = value >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_com: function(d,_) {
+		this.ram[d] = 255 - this.ram[d];
+		var _g = this;
+		_g.ram[95] &= -31;
+		var _g1 = this;
+		_g1.ram[95] |= 1;
+		if((this.ram[d] & 128) != 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 20;
+		}
+		if(this.ram[d] == 0) {
+			var _g3 = this;
+			_g3.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_neg: function(d,_) {
+		this.ram[d] = this.sub(0,this.ram[d]);
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_swap: function(d,_) {
+		var value = this.ram[d];
+		this.ram[d] = (value << 4 | value >> 4) & 255;
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_inc: function(d,_) {
+		var _g = this;
+		_g.ram[95] &= -31;
+		var v = this.ram[d] == 127;
+		var n = (this.ram[d] & 128) != 0;
+		this.ram[d] += 1;
+		if(v) {
+			var _g1 = this;
+			_g1.ram[95] |= 8;
+		}
+		if(n) {
+			var _g2 = this;
+			_g2.ram[95] |= 4;
+		}
+		if(v != n) {
+			var _g3 = this;
+			_g3.ram[95] |= 4;
+		}
+		if(this.ram[d] == 0) {
+			var _g4 = this;
+			_g4.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_asr: function(d,_) {
+		var value = this.ram[d];
+		var _g = this;
+		_g.ram[95] &= -32;
+		var carry = value & 1;
+		var _g1 = this;
+		_g1.ram[95] |= carry;
+		var topBit = value & 128;
+		var newValue = value >> 1 | topBit;
+		this.ram[d] = newValue;
+		if(newValue == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		var n = topBit != 0;
+		var b = carry != 0;
+		var v = n ? !b : b;
+		var s = n ? !v : v;
+		if(n) {
+			var _g3 = this;
+			_g3.ram[95] |= 4;
+		}
+		var v1 = v;
+		var s1 = s;
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_lsr: function(d,_) {
+		var value = this.ram[d];
+		var bit0 = value & 1;
+		var newValue = value >> 1;
+		this.ram[d] = newValue;
+		var _g = this;
+		_g.ram[95] &= -32;
+		if(bit0 != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 25;
+		}
+		if(newValue == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_ror: function(d,_) {
+		var value = this.ram[d];
+		var carry = this.ram[95] & 1;
+		var bit0 = value & 1;
+		var newValue = value >> 1 | carry << 7;
+		this.ram[d] = newValue;
+		var _g = this;
+		_g.ram[95] &= -32;
+		if(bit0 != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 25;
+		}
+		if(newValue == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_bset: function(bit,_) {
+		var _g = this;
+		_g.ram[95] |= bit;
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_bclr: function(bit,_) {
+		var _g = this;
+		_g.ram[95] &= ~bit;
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_ret: function(_,__) {
+		var _g = this;
+		var value = _g.ram[93] + (_g.ram[94] << 8) + 1;
+		_g.ram[93] = value & 255;
+		_g.ram[94] = value >> 8 & 255;
+		var tmp = this.ram[value & 65535] << 8;
+		var _g1 = this;
+		var value1 = _g1.ram[93] + (_g1.ram[94] << 8) + 1;
+		_g1.ram[93] = value1 & 255;
+		_g1.ram[94] = value1 >> 8 & 255;
+		this.PC = tmp + this.ram[value1 & 65535];
+		this.clockCycleCount += 4;
+	}
+	,_reti: function(_,__) {
+		var _g = this;
+		var value = _g.ram[93] + (_g.ram[94] << 8) + 1;
+		_g.ram[93] = value & 255;
+		_g.ram[94] = value >> 8 & 255;
+		var tmp = this.ram[value & 65535] << 8;
+		var _g1 = this;
+		var value1 = _g1.ram[93] + (_g1.ram[94] << 8) + 1;
+		_g1.ram[93] = value1 & 255;
+		_g1.ram[94] = value1 >> 8 & 255;
+		this.PC = tmp + this.ram[value1 & 65535];
+		var _g2 = this;
+		_g2.ram[95] |= 128;
+		this.clockCycleCount += 4;
+	}
+	,_ijmp: function(_,__) {
+		this.PC = this.ram[30] + (this.ram[31] << 8);
+		this.clockCycleCount += 2;
+	}
+	,_icall: function(_,__) {
+		var value = this.PC + 1;
+		var _g = this;
+		var _g1 = _g.ram[93] + (_g.ram[94] << 8);
+		var value1 = _g1 - 1;
+		_g.ram[93] = value1 & 255;
+		_g.ram[94] = value1 >> 8 & 255;
+		this.ram[_g1] = value & 255;
+		var _g2 = this;
+		var _g11 = _g2.ram[93] + (_g2.ram[94] << 8);
+		var value2 = _g11 - 1;
+		_g2.ram[93] = value2 & 255;
+		_g2.ram[94] = value2 >> 8 & 255;
+		this.ram[_g11] = value >> 8;
+		this.PC = this.ram[30] + (this.ram[31] << 8);
+		this.clockCycleCount += 3;
+	}
+	,_dec: function(d,_) {
+		var value = this.ram[d] - 1;
+		var v = value == 127;
+		var n = (value & 128) != 0;
+		this.ram[d] = value;
+		var _g = this;
+		_g.ram[95] &= -31;
+		if(v) {
+			var _g1 = this;
+			_g1.ram[95] |= 8;
+		}
+		if(n) {
+			var _g2 = this;
+			_g2.ram[95] |= 4;
+		}
+		if(n ? !v : v) {
+			var _g3 = this;
+			_g3.ram[95] |= 16;
+		}
+		if(value == 0) {
+			var _g4 = this;
+			_g4.ram[95] |= 2;
+		}
+		this.clockCycleCount += 1;
+		this.PC += 1;
+	}
+	,_jmp: function(highBits,_) {
+		var k = this.progMem[this.PC + 1];
+		k |= highBits;
+		this.clockCycleCount += 3;
+		this.PC = k;
+	}
+	,_call: function(highBits,_) {
+		var k = this.progMem[this.PC + 1];
+		k |= highBits;
+		var value = this.PC + 2;
+		var _g = this;
+		var _g1 = _g.ram[93] + (_g.ram[94] << 8);
+		var value1 = _g1 - 1;
+		_g.ram[93] = value1 & 255;
+		_g.ram[94] = value1 >> 8 & 255;
+		this.ram[_g1] = value & 255;
+		var _g2 = this;
+		var _g11 = _g2.ram[93] + (_g2.ram[94] << 8);
+		var value2 = _g11 - 1;
+		_g2.ram[93] = value2 & 255;
+		_g2.ram[94] = value2 >> 8 & 255;
+		this.ram[_g11] = value >> 8;
+		this.clockCycleCount += 4;
+		this.PC = k;
+	}
+	,_sbiw: function(d,k) {
+		var value = this.ram[d] + (this.ram[d + 1] << 8);
+		var _g = this;
+		_g.ram[95] &= -32;
+		var result;
+		var v;
+		var n;
+		var z;
+		var c;
+		var rdh7 = (this.ram[d + 1] & 128) != 0;
+		result = value - k;
+		n = (result & 32768) != 0;
+		if(!n) {
+			v = rdh7;
+		} else {
+			v = false;
+		}
+		z = (result & 65535) == 0;
+		if(n) {
+			c = !rdh7;
+		} else {
+			c = false;
+		}
+		if(n) {
+			var _g1 = this;
+			_g1.ram[95] |= 4;
+		}
+		if(v) {
+			var _g2 = this;
+			_g2.ram[95] |= 8;
+		}
+		if(n != v) {
+			var _g3 = this;
+			_g3.ram[95] |= 16;
+		}
+		if(z) {
+			var _g4 = this;
+			_g4.ram[95] |= 2;
+		}
+		if(c) {
+			var _g5 = this;
+			_g5.ram[95] |= 1;
+		}
+		this.ram[d] = result & 255;
+		this.ram[d + 1] = result >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_adiw: function(d,k) {
+		var value = this.ram[d] + (this.ram[d + 1] << 8);
+		var _g = this;
+		_g.ram[95] &= -32;
+		var result;
+		var v;
+		var n;
+		var z;
+		var c;
+		var rdh7 = (this.ram[d + 1] & 128) != 0;
+		result = value + k;
+		n = (result & 32768) != 0;
+		if(n) {
+			v = !rdh7;
+		} else {
+			v = false;
+		}
+		z = (result & 65535) == 0;
+		if(!n) {
+			c = rdh7;
+		} else {
+			c = false;
+		}
+		if(n) {
+			var _g1 = this;
+			_g1.ram[95] |= 4;
+		}
+		if(v) {
+			var _g2 = this;
+			_g2.ram[95] |= 8;
+		}
+		if(n != v) {
+			var _g3 = this;
+			_g3.ram[95] |= 16;
+		}
+		if(z) {
+			var _g4 = this;
+			_g4.ram[95] |= 2;
+		}
+		if(c) {
+			var _g5 = this;
+			_g5.ram[95] |= 1;
+		}
+		this.ram[d] = result & 255;
+		this.ram[d + 1] = result >> 8 & 255;
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_mul: function(d,r) {
+		var product = this.ram[d] * this.ram[r];
+		this.ram[0] = product & 255;
+		this.ram[1] = product >> 8 & 255;
+		var _g = this;
+		_g.ram[95] &= -4;
+		if((product & 32768) != 0) {
+			var _g1 = this;
+			_g1.ram[95] |= 1;
+		}
+		if(product == 0) {
+			var _g2 = this;
+			_g2.ram[95] |= 2;
+		}
+		this.clockCycleCount += 2;
+		this.PC += 1;
+	}
+	,_fmuls: function(_,__) {
+		haxe_Log.trace("mulsu, fmul, fmuls, fmulsu unimplemented",{ fileName : "AVR8.hx", lineNumber : 960, className : "AVR8", methodName : "_fmuls"});
+	}
+	,_sleep: function(_,__) {
+	}
+	,_break: function(_,__) {
+	}
+	,_wdr: function(_,__) {
+	}
+	,_spm_z: function(_,__) {
+	}
+	,_spm_z_p: function(_,__) {
+	}
+	,_eijmp: function(_,__) {
+	}
+	,_eicall: function(_,__) {
+	}
+	,_no_bitio: function(_,__) {
+		haxe_Log.trace("cbi sbic sbi sbis unimplemented",{ fileName : "AVR8.hx", lineNumber : 992, className : "AVR8", methodName : "_no_bitio"});
+	}
+	,_not_an_instruction: function(a,b) {
+	}
+	,apply2: function(fn,a,b) {
+		var unbound = fn.method;
+		return { fn : unbound, a : a, b : b};
+	}
+	,instructionAsFunction: function(instruction) {
+		var _g = instruction & 61440;
+		switch(_g) {
+		case 0:
+			var _g1 = instruction & 3072;
+			switch(_g1) {
+			case 0:
+				var _g2 = instruction & 65280;
+				switch(_g2) {
+				case 0:
+					return this.apply2($bind(this,this._nop),0,0);
+				case 256:
+					var d = (instruction & 240) >> 4;
+					var r = instruction & 15;
+					return this.apply2($bind(this,this._movw),d,r);
+				case 512:
+					var d1 = 16 + (instruction & 240) >> 4;
+					var r1 = 16 + (instruction & 15);
+					return this.apply2($bind(this,this._muls),d1,r1);
+				case 768:
+					return this.apply2($bind(this,this._fmuls),0,0);
+				}
+				break;
+			case 1024:
+				var d2 = (instruction & 496) >> 4;
+				var r2 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._cpc),d2,r2);
+			case 2048:
+				var d3 = (instruction & 496) >> 4;
+				var r3 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._sbc),d3,r3);
+			case 3072:
+				var d4 = (instruction & 496) >> 4;
+				var r4 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._add),d4,r4);
+			}
+			throw new js__$Boot_HaxeError("shouldn't happen");
+			break;
+		case 4096:
+			var _g3 = instruction & 3072;
+			switch(_g3) {
+			case 0:
+				var d5 = (instruction & 496) >> 4;
+				var r5 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._cpse),d5,r5);
+			case 1024:
+				var d6 = (instruction & 496) >> 4;
+				var r6 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._cp),d6,r6);
+			case 2048:
+				var d7 = (instruction & 496) >> 4;
+				var r7 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._sub),d7,r7);
+			case 3072:
+				var d8 = (instruction & 496) >> 4;
+				var r8 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._adc),d8,r8);
+			}
+			break;
+		case 8192:
+			var _g4 = instruction & 3072;
+			switch(_g4) {
+			case 0:
+				var d9 = (instruction & 496) >> 4;
+				var r9 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._and),d9,r9);
+			case 1024:
+				var d10 = (instruction & 496) >> 4;
+				var r10 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._eor),d10,r10);
+			case 2048:
+				var d11 = (instruction & 496) >> 4;
+				var r11 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._or),d11,r11);
+			case 3072:
+				var d12 = (instruction & 496) >> 4;
+				var r12 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._mov),d12,r12);
+			}
+			break;
+		case 12288:
+			var k = (instruction & 3840) >> 4 | instruction & 15;
+			var d13 = 16 + ((instruction & 240) >> 4);
+			return this.apply2($bind(this,this._cpi),d13,k);
+		case 16384:
+			var k1 = (instruction & 3840) >> 4 | instruction & 15;
+			var d14 = 16 + ((instruction & 240) >> 4);
+			return this.apply2($bind(this,this._sbci),d14,k1);
+		case 20480:
+			var k2 = (instruction & 3840) >> 4 | instruction & 15;
+			var d15 = 16 + ((instruction & 240) >> 4);
+			return this.apply2($bind(this,this._subi),d15,k2);
+		case 24576:
+			var k3 = (instruction & 3840) >> 4 | instruction & 15;
+			var d16 = 16 + ((instruction & 240) >> 4);
+			return this.apply2($bind(this,this._ori),d16,k3);
+		case 28672:
+			var k4 = (instruction & 3840) >> 4 | instruction & 15;
+			var d17 = 16 + ((instruction & 240) >> 4);
+			return this.apply2($bind(this,this._andi),d17,k4);
+		case 36864:
+			var _g5 = instruction & 65024;
+			switch(_g5) {
+			case 36864:
+				var d18 = (instruction & 496) >> 4;
+				var _g6 = instruction & 65039;
+				switch(_g6) {
+				case 36864:
+					return this.apply2($bind(this,this._lds),d18,0);
+				case 36865:
+					return this.apply2($bind(this,this._ld_z_p),d18,0);
+				case 36866:
+					return this.apply2($bind(this,this._ld_p_z),d18,0);
+				case 36867:
+					return this.apply2($bind(this,this._not_an_instruction),0,0);
+				case 36868:
+					return this.apply2($bind(this,this._lpm_z),d18,0);
+				case 36869:
+					return this.apply2($bind(this,this._lpm_z_p),d18,0);
+				case 36870:
+					return this.apply2($bind(this,this._elpm_z),d18,0);
+				case 36871:
+					return this.apply2($bind(this,this._elpm_z_p),d18,0);
+				case 36872:
+					return this.apply2($bind(this,this._not_an_instruction),0,0);
+				case 36873:
+					return this.apply2($bind(this,this._ld_y_p),d18,0);
+				case 36874:
+					return this.apply2($bind(this,this._ld_p_y),d18,0);
+				case 36875:
+					return this.apply2($bind(this,this._not_an_instruction),0,0);
+				case 36876:
+					return this.apply2($bind(this,this._ld_x),d18,0);
+				case 36877:
+					return this.apply2($bind(this,this._ld_x_p),d18,0);
+				case 36878:
+					return this.apply2($bind(this,this._ld_p_x),d18,0);
+				case 36879:
+					return this.apply2($bind(this,this._pop),d18,0);
+				}
+				break;
+			case 37376:
+				var d19 = (instruction & 496) >> 4;
+				var _g7 = instruction & 65039;
+				switch(_g7) {
+				case 37376:
+					return this.apply2($bind(this,this._sts),d19,0);
+				case 37377:
+					return this.apply2($bind(this,this._st_z_p),d19,0);
+				case 37378:
+					return this.apply2($bind(this,this._st_p_z),d19,0);
+				case 37385:
+					return this.apply2($bind(this,this._st_y_p),d19,0);
+				case 37386:
+					return this.apply2($bind(this,this._st_p_y),d19,0);
+				case 37388:
+					return this.apply2($bind(this,this._st_x),d19,0);
+				case 37389:
+					return this.apply2($bind(this,this._st_x_p),d19,0);
+				case 37390:
+					return this.apply2($bind(this,this._st_p_x),d19,0);
+				case 37391:
+					return this.apply2($bind(this,this._push),d19,0);
+				default:
+					return this.apply2($bind(this,this._not_an_instruction),0,0);
+				}
+				break;
+			case 37888:
+				var _g8 = instruction & 65039;
+				switch(_g8) {
+				case 37888:
+					var d20 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._com),d20,0);
+				case 37889:
+					var d21 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._neg),d21,0);
+				case 37890:
+					var d22 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._swap),d22,0);
+				case 37891:
+					var d23 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._inc),d23,0);
+				case 37892:
+					return this.apply2($bind(this,this._not_an_instruction),0,0);
+				case 37893:
+					var d24 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._asr),d24,0);
+				case 37894:
+					var d25 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._lsr),d25,0);
+				case 37895:
+					var d26 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._ror),d26,0);
+				case 37896:
+					if((instruction & 65295) == 37896) {
+						var bit = 1 << ((instruction & 48) >> 4);
+						if((instruction & 64) == 0) {
+							return this.apply2($bind(this,this._bset),bit,0);
+						} else {
+							return this.apply2($bind(this,this._bclr),bit,0);
+						}
+					} else {
+						switch(instruction) {
+						case 38152:
+							return this.apply2($bind(this,this._ret),0,0);
+						case 38168:
+							return this.apply2($bind(this,this._reti),0,0);
+						case 38280:
+							return this.apply2($bind(this,this._sleep),0,0);
+						case 38296:
+							return this.apply2($bind(this,this._break),0,0);
+						case 38312:
+							return this.apply2($bind(this,this._wdr),0,0);
+						case 38344:
+							return this.apply2($bind(this,this._lpm_z),0,0);
+						case 38360:
+							return this.apply2($bind(this,this._elpm_z),0,0);
+						case 38376:
+							return this.apply2($bind(this,this._spm_z),0,0);
+						case 38392:
+							return this.apply2($bind(this,this._spm_z_p),0,0);
+						default:
+							return this.apply2($bind(this,this._not_an_instruction),0,0);
+						}
+					}
+					break;
+				case 37897:
+					switch(instruction) {
+					case 37897:
+						return this.apply2($bind(this,this._ijmp),0,0);
+					case 37913:
+						return this.apply2($bind(this,this._eijmp),0,0);
+					case 38153:
+						return this.apply2($bind(this,this._icall),0,0);
+					case 38169:
+						return this.apply2($bind(this,this._eicall),0,0);
+					default:
+						return this.apply2($bind(this,this._not_an_instruction),0,0);
+					}
+					break;
+				case 37898:
+					var d27 = (instruction & 496) >> 4;
+					return this.apply2($bind(this,this._dec),d27,0);
+				case 37899:
+					return this.apply2($bind(this,this._not_an_instruction),0,0);
+				case 37900:case 37901:
+					var highBits = (instruction & 496) << 13 | (instruction & 1) << 16;
+					return this.apply2($bind(this,this._jmp),highBits,0);
+				case 37902:case 37903:
+					var highBits1 = (instruction & 496) << 13 | (instruction & 1) << 16;
+					return this.apply2($bind(this,this._call),highBits1,0);
+				}
+				break;
+			case 38400:
+				var d28 = ((instruction & 48) >> 3) + 24;
+				var k5 = (instruction & 192) >> 2 | instruction & 15;
+				var sub = (instruction & 256) == 256;
+				if(sub) {
+					return this.apply2($bind(this,this._sbiw),d28,k5);
+				} else {
+					return this.apply2($bind(this,this._adiw),d28,k5);
+				}
+				break;
+			case 38912:
+				return this.apply2($bind(this,this._no_bitio),0,0);
+			case 39424:
+				return this.apply2($bind(this,this._no_bitio),0,0);
+			case 39936:case 40448:
+				var d29 = (instruction & 496) >> 4;
+				var r13 = (instruction & 512) >> 5 | instruction & 15;
+				return this.apply2($bind(this,this._mul),d29,r13);
+			}
+			break;
+		case 32768:case 40960:
+			var q = instruction & 7 | (instruction & 3072) >> 7 | (instruction & 8192) >> 8;
+			var d30 = (instruction & 496) >> 4;
+			var store = (instruction & 512) != 0;
+			var useY = (instruction & 8) != 0;
+			if(store) {
+				if(useY) {
+					return this.apply2($bind(this,this._std_y),q,d30);
+				} else {
+					return this.apply2($bind(this,this._std_z),q,d30);
+				}
+			} else if(useY) {
+				return this.apply2($bind(this,this._ldd_y),d30,q);
+			} else {
+				return this.apply2($bind(this,this._ldd_z),d30,q);
+			}
+			break;
+		case 45056:
+			var a = instruction & 15 | (instruction & 1536) >> 5;
+			var d31 = (instruction & 496) >> 4;
+			if((instruction & 2048) == 0) {
+				return this.apply2($bind(this,this._in),d31,a);
+			} else {
+				return this.apply2($bind(this,this._out),a,d31);
+			}
+			break;
+		case 49152:
+			var k6 = instruction & 4095;
+			if(k6 > 2048) {
+				k6 -= 4096;
+			}
+			return this.apply2($bind(this,this._rjmp),k6,0);
+		case 53248:
+			var k7 = instruction & 4095;
+			if(k7 > 2048) {
+				k7 -= 4096;
+			}
+			return this.apply2($bind(this,this._rcall),k7,0);
+		case 57344:
+			var k8 = (instruction & 3840) >> 4 | instruction & 15;
+			var d32 = 16 + ((instruction & 240) >> 4);
+			return this.apply2($bind(this,this._ldi),d32,k8);
+		case 61440:
+			var bit1 = 1 << (instruction & 7);
+			var nextPC = this.PC + 1;
+			var clocks = 1;
+			if((instruction & 2048) == 0) {
+				var k9 = (instruction & 1016) >> 3;
+				if(k9 > 63) {
+					k9 -= 128;
+				}
+				if((instruction & 1024) == 0) {
+					return this.apply2($bind(this,this._brbs),bit1,k9);
+				} else {
+					return this.apply2($bind(this,this._brbc),bit1,k9);
+				}
+			} else if((instruction & 1024) == 0) {
+				var d33 = (instruction & 496) >> 4;
+				if((instruction & 512) == 0) {
+					return this.apply2($bind(this,this._bld),d33,bit1);
+				} else {
+					return this.apply2($bind(this,this._bst),d33,bit1);
+				}
+			} else {
+				var d34 = (instruction & 496) >> 4;
+				if((instruction & 512) == 0) {
+					return this.apply2($bind(this,this._sbrc),d34,bit1);
+				} else {
+					return this.apply2($bind(this,this._sbrs),d34,bit1);
+				}
+			}
+			break;
+		default:
+			throw new js__$Boot_HaxeError("shouldn't happen " + instruction);
+		}
+		throw new js__$Boot_HaxeError("shouldn't happen" + instruction);
+	}
 	,exec: function() {
 		var clocks = 1;
 		var nextPC = this.PC + 1;
@@ -242,7 +1444,7 @@ AVR8.prototype = {
 					clocks = 2;
 					break;
 				case 768:
-					haxe_Log.trace("mulsu, fmul, fmuls, fmulsu unimplemented",{ fileName : "AVR8.hx", lineNumber : 414, className : "AVR8", methodName : "exec"});
+					haxe_Log.trace("mulsu, fmul, fmuls, fmulsu unimplemented",{ fileName : "AVR8.hx", lineNumber : 1513, className : "AVR8", methodName : "exec"});
 					break;
 				}
 				break;
@@ -890,10 +2092,10 @@ AVR8.prototype = {
 				this.ram[d28 + 1] = result6 >> 8 & 255;
 				break;
 			case 38912:
-				haxe_Log.trace("cbi sbic unimplemented",{ fileName : "AVR8.hx", lineNumber : 1005, className : "AVR8", methodName : "exec"});
+				haxe_Log.trace("cbi sbic unimplemented",{ fileName : "AVR8.hx", lineNumber : 2104, className : "AVR8", methodName : "exec"});
 				break;
 			case 39424:
-				haxe_Log.trace("sbi sbis unimplemented",{ fileName : "AVR8.hx", lineNumber : 1008, className : "AVR8", methodName : "exec"});
+				haxe_Log.trace("sbi sbis unimplemented",{ fileName : "AVR8.hx", lineNumber : 2107, className : "AVR8", methodName : "exec"});
 				break;
 			case 39936:case 40448:
 				var d29 = (instruction & 496) >> 4;
@@ -1027,7 +2229,8 @@ AVR8.prototype = {
 		var _g = 0;
 		while(_g < 10000000) {
 			var i = _g++;
-			this.exec();
+			var ins = this.table[this.progMem[this.PC]];
+			ins.fn.call(this,ins.a,ins.b);
 			if(this.PC == this.breakPoint) {
 				break;
 			}
@@ -1169,7 +2372,7 @@ AVR8.prototype = {
 				switch(_g6) {
 				case 36864:
 					var k5 = this.progMem[memLocation + 1];
-					result = "LDS r" + d15 + "," + k5;
+					result = "LDS r" + d15 + "," + hex4(k5);
 					break;
 				case 36865:
 					result = "LD r" + d15 + ",Z+";
@@ -1490,7 +2693,10 @@ Audio.square = function(x) {
 };
 Audio.prototype = {
 	start: function() {
-		this.source.start();
+		this.ctx.suspend();
+	}
+	,stop: function() {
+		this.ctx.resume();
 	}
 	,stepForFrequency: function(freq) {
 		return 2 * Math.PI * freq / this.sourceBuffer.sampleRate;
@@ -1901,6 +3107,7 @@ var EmulatortHost = function() {
 	this.clocksPerDisplayUpdate = 0;
 	this.logText = "";
 	this.registerDiv = [];
+	this.muted = false;
 	this.halted = true;
 	var _gthis = this;
 	window.breakPoint = 16776960;
@@ -1995,6 +3202,12 @@ var EmulatortHost = function() {
 			window.breakPoint = candidate;
 		}
 	});
+	this.muteButton = window.document.createElement("button");
+	this.muteButton.textContent = "🔈";
+	this.muteButton.onclick = function() {
+		_gthis.set_muted(!_gthis.muted);
+	};
+	controlPanel.appendChild(this.muteButton);
 	this.logDiv = EmulatortHost.makeDiv(containerElement,"log");
 	this.logDiv.textContent = "Log\nStarted...\n ";
 	this.avr = new AVR8();
@@ -2061,7 +3274,7 @@ var EmulatortHost = function() {
 		while(_gthis.keyBuffer.length > 10) _gthis.keyBuffer.pop();
 	});
 	var hexURL = this.getQueryVariable("hex");
-	haxe_Log.trace("hex url is : ",{ fileName : "EmulatortHost.hx", lineNumber : 258, className : "EmulatortHost", methodName : "new", customParams : [hexURL]});
+	haxe_Log.trace("hex url is : ",{ fileName : "EmulatortHost.hx", lineNumber : 265, className : "EmulatortHost", methodName : "new", customParams : [hexURL]});
 	if(hexURL != "") {
 		var request = new haxe_Http(hexURL);
 		request.onData = function(data) {
@@ -2115,6 +3328,18 @@ EmulatortHost.prototype = {
 			this.keyBuffer.add(code);
 		}
 	}
+	,set_muted: function(newValue) {
+		if(newValue != this.muted) {
+			this.muted = newValue;
+			this.muteButton.textContent = this.muted ? "🔈" : "🔇";
+			if(this.muted) {
+				this.audioGenerator.stop();
+			} else {
+				this.audioGenerator.start();
+			}
+		}
+		return newValue;
+	}
 	,set_halted: function(newValue) {
 		if(newValue != this.halted) {
 			this.halted = newValue;
@@ -2138,7 +3363,10 @@ EmulatortHost.prototype = {
 		}
 		this.avr.breakPoint = window.breakPoint / 2;
 		if(!this.halted) {
+			var start = window.performance.now();
 			this.avr.tick(clockCyclesToEmulate);
+			var finish = window.performance.now();
+			this.outputDiv.textContent = "time " + (finish - start);
 		}
 		if(this.avr.PC == this.avr.breakPoint) {
 			this.set_halted(true);
@@ -2441,7 +3669,7 @@ EmulatortHost.prototype = {
 		this.displayGenerator.clear();
 		this.magicPasteBufferindex = 0;
 		this.outputDiv.textContent = "[reset]";
-		haxe_Log.trace("[Hay! reset]",{ fileName : "EmulatortHost.hx", lineNumber : 602, className : "EmulatortHost", methodName : "reset"});
+		haxe_Log.trace("[Hay! reset]",{ fileName : "EmulatortHost.hx", lineNumber : 628, className : "EmulatortHost", methodName : "reset"});
 		this.logText = "Start of log:";
 	}
 	,loadHexFile: function(text,debugData) {
@@ -2460,7 +3688,7 @@ EmulatortHost.prototype = {
 			this.avr.writeProgMem(chunk.address,chunk.data);
 			totalData += chunk.data.length;
 		}
-		haxe_Log.trace("loaded " + totalData + " bytes",{ fileName : "EmulatortHost.hx", lineNumber : 632, className : "EmulatortHost", methodName : "loadCodeChunks"});
+		haxe_Log.trace("loaded " + totalData + " bytes",{ fileName : "EmulatortHost.hx", lineNumber : 658, className : "EmulatortHost", methodName : "loadCodeChunks"});
 		this.set_halted(false);
 	}
 	,handleFileDrop: function(e) {
