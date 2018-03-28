@@ -117,7 +117,7 @@ var op_plain = "BREAK CLC CLH CLI CLN CLS CLT CLV CLZ RET".split(" ");
 var op_anyreg = "ASR COM DEC INC LSR NEG POP PUSH ROR SWAP TST".split(" ");
 var op_anyreg_anyreg = "ADC ADD AND CP CPC CPSE EOR MOV MUL OR SBC SUB".split(" ");
 var op_highreg_imm8bit = "ANDI CPI LDI ORI SBCI SUBI".split(" ");
-var op_anyreg_imm3bit = "BLD BST SBRC SBRS  ".split(" ");
+var op_anyreg_imm3bit = "BLD BST SBRC SBRS".split(" ");
 var op_branchcc = "BRCC BRCS BREQ BRGE BRHC BRHS BRID BRIE BRLO BRLT BRMI BRNE BRPL BRSH BRTC BRTS BRVC BRVS".split(" ");
 
 var sts_test = {
@@ -215,12 +215,12 @@ function makeToken(kind,pattern) {
   return result;
 }
 
-var directive = makeToken("directive",/^\.(?:macro|endmacro|include|snip|endsnip|org|dw|db|use)\b/);
+var directive = makeToken("directive",/^\.(?:macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use)\b/);
 //var macro = makeToken("macro",/^[.]macro/);
-var register = makeToken("register",/^(?:R|r)(?:[0-9]|[12][0-9]|3[01])\b/);
+var register = makeToken("register",/^((?:R|r)(?:[0-9]|[12][0-9]|3[01]))\b/);
 var label = makeToken("label",/^\w+:/);
 var local = makeToken("local label",/^\.\w+:/);
-var pseudoRegister = makeToken("X,Y, or Z",/^(?:X|Y|Z|x|y|z)/);
+var pseudoRegister = makeToken("X,Y, or Z",/^(?:X|Y|Z|W|x|y|z|w)\b/);
 var localLabelName = makeToken("local label name",/^\.\w+/);
 var uint =  makeToken("Integer",/^\d+/);
 var hexint =  makeToken("Hex Value",/^((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/);
@@ -232,6 +232,8 @@ var plus =  makeToken("+",/^[+]/);
 var colon =  makeToken(":",/^[:]/);
 var bra =  makeToken("(",/^[(]/);
 var ket =  makeToken(")",/^[)]/);
+var stringLiteral =  makeToken("string",/^((["][^"]*["])|(['][^']*[']))/);
+
 //var whitespace =  makeToken("whitespace",/^[ ]+/);
 
 var notsure =  makeToken("Don't know what this is",/^\s/);
@@ -249,6 +251,12 @@ function tokenizeLine (line) {
       value=match[0];
       pos+=value.length;
       line=line.from(value.length);
+    }
+    match=/^((\/\/)|([\;]))/.exec(line);
+    if (match) {
+      //the rest is comment so exit early
+      result.text=result.text.substring(0,pos);
+      return result;
     }
     //todo: match single and double quote spans
     //todo: match out comments 
@@ -271,11 +279,26 @@ function tokenizeLine (line) {
   return result;
 }
 
+let defaultProxyHandler = {
+  set : function (obj, prop, value) {
+    obj[prop] = value;
+    return true;
+  },
+  get : function (obj,prop) {
+    if (prop in obj) return obj[prop];
+    return 0;
+  },
+  has : function (obj,prop) {
+    return true;
+  }
+}
 
 function assemble(mainFilename, loadFn) {
   var lineNumber = 0;
   var fileNumber = 0;
-  var mathState={};
+  var mathStateCore = {}
+  var mathStateProxy =new Proxy(mathStateCore,defaultProxyHandler);
+  var mathState=mathStateProxy;
   var instructions = {};
   var output = [];
   var debugInfo = {fileList:[],addressMap:{}};
@@ -295,6 +318,12 @@ function assemble(mainFilename, loadFn) {
   }
 
   function initPass() {
+    if (pass===1) {
+      mathState=mathStateProxy;
+    } else {
+      mathState=mathStateCore;
+    }
+
     lineNumber=0;
     fileNumber=0;
     macros={};
@@ -305,6 +334,7 @@ function assemble(mainFilename, loadFn) {
     output = [];
     debugInfo={fileList:[],addressMap:{}};;
     newChunk();
+
   }
 
   function newChunk(address=0) {
@@ -332,7 +362,7 @@ function assemble(mainFilename, loadFn) {
   function addLocalLabel(id) {
     if (pass!=1) return; 
     let fullName = localLabelContext()+id;
-    note("add local label "+id+ "  as "+fullName)
+    //note("add local label "+id+ "  as "+fullName)
     if (labels.hasOwnProperty(fullName)) error ("duplicate label:  "+id +" after "+previousLabel);
 
     let address=currentCodePosition()
@@ -348,14 +378,33 @@ function assemble(mainFilename, loadFn) {
     return labels[id].address;
   }
 
-
   function emitWords(wordArray) {
+    wordAlign();
     currentChunk.data=currentChunk.data.concat(wordArray);
     //note("\t\t\t\t\t\t\temitting words [" + wordArray.map(a=>a.toString(16))+"]");
   }
 
   function emitWord(word) {
     emitWords([word]);
+  }
+
+  var storedByte = null
+
+  function emitByte(byte) {
+    if (storedByte == null) {
+      storedByte=byte;
+    } else {
+      let word = (byte << 8) + ( storedByte) 
+      storedByte = null;
+      emitWord(word);
+    }
+  }
+
+  function wordAlign() {
+    if (storedByte != null) {
+      currentChunk.data.push(storedByte);
+      storedByte = null;
+    }
   }
 
   function isInstruction(s) {
@@ -501,6 +550,8 @@ function assemble(mainFilename, loadFn) {
     }
     //console.log(look)
     let pointer=match(pseudoRegister).toUpperCase();
+    if (pointer === "W" ) fail("W (r25:r24) can't be used as an index register");
+
     //note ("pointer "+source);
     
     if (look.token === plus) {
@@ -584,6 +635,14 @@ function assemble(mainFilename, loadFn) {
     emitWords(instructionWord(instructions[instruction],{d,K}));    
   }
 
+  function parse_anyreg_imm3bit(instruction) {
+    let d = regNumber(match(register));    
+    match(comma);
+    let b=parse_intExpression();            
+    if ((b<0) || (b>7)) fail("number in 0...7 expected");
+    emitWords(instructionWord(instructions[instruction],{d,b}));    
+  }
+
   function parse_addressReferance() {
     var id;
     if (look.token === localLabelName ) {
@@ -655,12 +714,30 @@ function assemble(mainFilename, loadFn) {
     emitWords(instructionWord(instructions[instruction],{k,d}));   
   }
 
-  function parse_adiw(instruction) {
-    let d1 = regNumber(match(register));
+  function matchRegisterPair() {
+    if (look.token === pseudoRegister) {
+      let p = match(pseudoRegister).toUpperCase();
+      switch (p) {
+        case "W": return [24,25];
+        case "X": return [26,27];
+        case "Y": return [28,29];
+        case "Z": return [30,31];
+      }
+      fail("matched "+P+" as a pseudoRegister?  shouldn't happen")
+    }
+    let high = regNumber(match(register));
     match(colon);
-    let d = regNumber(match(register));
+    let low = regNumber(match(register));
 
-    if ( (d+1 != d1)  ||  !([24,26,28,30].includes(d)) ) {
+    if (high-1 !== low) fail("registerpair must be n+1:n ")
+    if (low&1 == 1) fail("second(low) half  of register pair must be an even numbered register");
+
+    return [low,high];
+  }
+  function parse_adiw(instruction) {
+    let [d,d1] = matchRegisterPair();
+
+    if ( !([24,26,28,30].includes(d)) ) {
       fail("register pair must be one of r25:r24   r27:r26   r29:r28   r31:r30 ")
     }
 
@@ -677,32 +754,22 @@ function assemble(mainFilename, loadFn) {
     if ((K<0) || (K>=64)) fail("constant must be within 0-63");
     match(comma);
 
-    let d1 = regNumber(match(register));
-    match(colon);
-    let d = regNumber(match(register));
 
-    if ( (d+1 != d1)  ||  !([24,26,28,30].includes(d)) ) {
+    let [d,d1] = matchRegisterPair();
+
+    if ( !([24,26,28,30].includes(d)) ) {
       fail("register pair must be one of r25:r24   r27:r26   r29:r28   r31:r30 ")
     }
     d=(d-24)>>1;
     emitWords(instructionWord(instructions[instruction],{K,d}));   
   }
+
   function parse_movw(instruction) {
-    let d1 = regNumber(match(register));
-    match(colon);
-    let d = regNumber(match(register));
+    let [d,d1] = matchRegisterPair();
 
     match(comma);
 
-    let r1 = regNumber(match(register));
-    match(colon);
-    let r = regNumber(match(register));
-    if ( (d&1==1) || (r&1==1))
-      fail("second half of register pair must be an even numbered register");
-
-    if ( (d+1 != d1)  || (r+1 != r1)  ) {
-      fail("register pair must be r[n+1]:r[n] ")
-    }
+    let [r,r1] = matchRegisterPair();
 
     d>>=1;
     r>>=1;
@@ -725,6 +792,35 @@ function assemble(mainFilename, loadFn) {
       fail ("comma or end of line expected");
     }
   }
+
+  function parse_db() {
+    function check(v) {
+      if ( (v > 255) ||  (v < -128)) fail("value must be 8 bit word, received:"+ v);
+      return v;
+    }
+    function doEntry() {
+      if (look.token === stringLiteral) {
+        let s = match(stringLiteral);
+        s=s.substring(1,s.length-1);
+        for (let c of s) {
+          emitByte(check(c.charCodeAt(0)));
+        }
+      }
+      else {
+        let value = parse_intExpression();
+        emitByte(check(value));
+      }
+    }
+    doEntry();
+    while (look.token === comma) {
+      match(comma);
+      doEntry();
+    }
+    if (look.token != endToken) {
+      fail ("comma or end of line expected");
+    }
+  }
+
   function parse_instruction (id) {
     //note("instruction "+id); 
     id=id.toUpperCase();
@@ -739,14 +835,14 @@ function assemble(mainFilename, loadFn) {
       play_macro(macro);
 
       return;
-    } 
+    }     
     //if ( (look.token === equals) || (look.token === bra) ) {
-    if (true) {
+    if (look.token !== endToken) {
       //var line=tokenList.from(tokenIndex-2).reduce( ((a,b)=>a+" "+b.value) ,"");
       var line = tokenList.text.from(tokenList[tokenIndex-2].pos);
       mathEval(line);
     } else {
-      fail("coudn't figure out what "+look.value+" was doing here.")
+      fail("couldn't figure out what this was at all")
     }
   }
   
@@ -782,7 +878,7 @@ function assemble(mainFilename, loadFn) {
         skipToken();
       }
     }
-    recordingMacro = {name,parameters,lines:[]};
+    recordingMacro = {name,parameters,lineNumber,lines:[]};
     lineParser=record_macro_line;
   }
 
@@ -889,8 +985,13 @@ function assemble(mainFilename, loadFn) {
         parse_include();
         break;
       case ".dw":
+      case ".word":
         parse_dw();
-        break
+        break;
+      case ".db":
+      case ".byte":      
+        parse_db();
+        break;
       case ".snip":      
         start_snippit();
         break;
@@ -934,10 +1035,19 @@ function assemble(mainFilename, loadFn) {
         lineNumber+=1;
       }
       catch (e)  {
-        error("error on line "+ lineNumber+":  "+e.message,lineNumber);
+        let filename = debugInfo.fileList[fileNumber];
+        error("error in "+filename+" on line "+ lineNumber+":  "+e.message,{filename,lineNumber});
         throw e;
       }
-    }  
+    } 
+    if (lineParser === record_macro_line)  {
+      let filename = debugInfo.fileList[fileNumber];
+      error("reached end of file while in macro: ",{filename,lineNumber:recordingMacro.lineNumber});      
+    }
+    if (lineParser === record_snippit_line)  {
+      let filename = debugInfo.fileList[fileNumber];
+      error("reached end of file while in snippit: ",{filename,lineNumber:recordingSnippit.lineNumber});      
+    }
   }
 
   function assembleFile(filename) {
@@ -982,8 +1092,12 @@ function assemble(mainFilename, loadFn) {
   for (let op of op_anyreg) {
     instructions[op].parse=parse_anyreg;    
   }
-  for (let op of op_highreg_imm8bit) {
+  for (let op of op_highreg_imm8bit) {    
     instructions[op].parse=parse_highreg_imm8bit;    
+  }
+  for (let op of op_anyreg_imm3bit) {
+    console.log(op);
+    instructions[op].parse=parse_anyreg_imm3bit;    
   }
   
   for (let op of op_branchcc) {
