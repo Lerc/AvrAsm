@@ -19,9 +19,9 @@ The assembler leverages Math.js for some of the features.  This allows constant 
 
 Labels are identifiers ending in a colon.  Labels beginning with a . are local, scoped to the last global label
 
-##Directives 
+## Directives 
 
-####.macro    (completed with .endmacro )
+#### .macro    (completed with .endmacro )
 ````
 .macro addi reg,imm
 	subi reg,-imm
@@ -29,7 +29,7 @@ Labels are identifiers ending in a colon.  Labels beginning with a . are local, 
 ````
 macros can be used where instructions are expected and can generate multiple instructions from a single macro 'opcode'
 
-####.def
+#### .def
 ````
   .def HL r26
   .def move_to_r0 mov r0,
@@ -39,13 +39,13 @@ macros can be used where instructions are expected and can generate multiple ins
 ````
 .def can replace any identifier with a series of tokens.  
 
-####.include
+#### .include
 ````
 .include filename
 ````
 Inludes another file at this point in the source.  Filename Without quotes. 
 
-####.snip   (completed with .endsnip )
+#### .snip   (completed with .endsnip )
 
 ````
 .snip divide_8bit_by_8bit
@@ -80,7 +80,7 @@ Inludes another file at this point in the source.  Filename Without quotes.
 ````
 The code in the divide_8bit_by_8bit snippet will not be assmbled unless the divi macro is invoked.
 
-####.use
+#### .use
 Causes a snip to be assembled.  Snips are appended to the end to the source if they are used.  The snip is included once.  Multiple .use directives referencing the same snip do not cause additional instances to be assembled.
 
 ````
@@ -93,17 +93,17 @@ Causes a snip to be assembled.  Snips are appended to the end to the source if t
   call ComeRightBack
 ````
 
-####.org
+#### .org
 Sets the starting address for subsequent code generation.
 
-####.dw   (alias .word)
+#### .dw   (alias .word)
 direct word generation.
 
 
-####.db   (alias .byte)
+#### .db   (alias .byte)
 direct byte generation.  String literals may be used to provide a series of bytes.
 
-#####Note:
+##### Note:
   .db generates half-word data.   Any following code generation other than .db will be padded to be word aligned. 
   
 
