@@ -83,7 +83,7 @@ var avrInstructionEncodings = {
   RETI:   "1001 0101 0001 1000",
   RJMP:   "1100 kkkk kkkk kkkk",
   //ROL is ADC Rd,Rd
-  ROR:    "1001 010d dddd 1111",
+  ROR:    "1001 010d dddd 0111",
   SBC:    "0000 10rd dddd rrrr",
   SBCI:   "0100 KKKK dddd KKKK",
   SBI:    "1001 1010 AAAA Abbb",
@@ -215,7 +215,7 @@ function makeToken(kind,pattern) {
   return result;
 }
 
-var directive = makeToken("directive",/^\.(?:macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use)\b/);
+var directive = makeToken("directive",/^\.(?:macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use|def)\b/);
 //var macro = makeToken("macro",/^[.]macro/);
 var register = makeToken("register",/^((?:R|r)(?:[0-9]|[12][0-9]|3[01]))\b/);
 var label = makeToken("label",/^\w+:/);
@@ -240,8 +240,9 @@ var notsure =  makeToken("Don't know what this is",/^\s/);
 
 var endToken = {kind:"end"};
 
-function tokenizeLine (line) {
+function tokenizeLine (line,definitions = {} ) {
   var result =[];
+  let text=line;
   result.text=line;
   var pos=0;
   var match;
@@ -255,7 +256,7 @@ function tokenizeLine (line) {
     match=/^((\/\/)|([\;]))/.exec(line);
     if (match) {
       //the rest is comment so exit early
-      result.text=result.text.substring(0,pos);
+      result.text=text.substring(0,pos);
       return result;
     }
     //todo: match single and double quote spans
@@ -269,13 +270,16 @@ function tokenizeLine (line) {
           return;
         }
         pos+=match.index;
-        result.push({token:rule, value,pos});        
+        if (definitions.hasOwnProperty(value)) {          
+          result=[...result,...definitions[value]];
+        } else result.push({token:rule, value,pos});        
         line=line.from(match.index+value.length);
         pos+=value.length;
         break;
       }     
     }         
   } while (match);
+  result.text=text;
   return result;
 }
 
@@ -302,7 +306,7 @@ function assemble(mainFilename, loadFn) {
   var instructions = {};
   var output = [];
   var debugInfo = {fileList:[],addressMap:{}};
-
+  var definitions = {};
   var currentChunk = {};
   var labels = {};
   var pass=0;
@@ -328,6 +332,7 @@ function assemble(mainFilename, loadFn) {
     fileNumber=0;
     macros={};
     snippits={};
+    definitions={};
     usedSnippits=new Set();
     macroStack = [];
     previousLabel = "_start_of_program_";
@@ -439,8 +444,13 @@ function assemble(mainFilename, loadFn) {
   function getToken() {
     look = readToken();
   }
+
   function skipToken() {
     getToken();
+  }
+
+  function remainingTokens() {
+    return tokenList.slice(tokenIndex-1);
   }
 
   function match(tokenType) {
@@ -460,13 +470,6 @@ function assemble(mainFilename, loadFn) {
       (token === bra) ||
       (token === plus) ||
       (token === minus);
-  }
-
-  function is_reg0_31(token)  {
-
-  }
-  function is_reg15_31(token) {
-
   }
 
   function regNumber(reg) {
@@ -971,13 +974,28 @@ function assemble(mainFilename, loadFn) {
   }
 
   function parse_include() {
-    console.log(look);
     let includeName = look.value;
     assembleFile(includeName);
   }
 
+  function parse_org() {
+    var address =parse_intExpression();
+    if ( (address < 0) || (address > 0x1ffff) ) fail("address out of range ");
+    if ( (address & 1) === 1 ) fail("must be even numbered byte address ");
+    
+    newChunk(address/2);
+  }
+
+  function parse_def() {
+    let name = match(identifier);
+    definitions[name]=remainingTokens();
+  }
+
   function parse_directive(kind) {
     switch (kind) {
+      case ".def":
+        parse_def();
+        break;
       case ".macro":
         start_macro();
         break;
@@ -998,13 +1016,16 @@ function assemble(mainFilename, loadFn) {
       case ".use":
         use_snippit(match(identifier));
         break;
+      case ".org":
+        parse_org();
+        break;
       default:
         fail("directive "+kind+" not implemented yet");
     }
 
   }
   function parse_standard_line(line) {
-    var t = tokenizeLine(line);    
+    var t = tokenizeLine(line,definitions);    
     //if (pass==1) console.log( line, t);
     useTokens(t);     
     switch(look.token) {
@@ -1056,7 +1077,7 @@ function assemble(mainFilename, loadFn) {
     console.log("assembling "+filename);
     debugInfo.fileList.push(filename);
     fileNumber=debugInfo.fileList.length-1;
-    console.log(debugInfo);
+    //console.log(debugInfo);
     lineNumber=1;
     assembleLines(lines);
     [lineNumber,fileNumber] = store;
@@ -1123,6 +1144,7 @@ function assemble(mainFilename, loadFn) {
 
   for (let chunk of output) {
     chunk.data = new Uint16Array(chunk.data);
+    console.log(chunk);
   }
   console.log(debugInfo)
   return {output,debugInfo};
