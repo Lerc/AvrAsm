@@ -44,7 +44,7 @@ body {
 font-family: 'DejaVu Sans Mono', "Consolas", "Droid Sans Mono", monospace;
 font-size: 20px/24px;
 width:800px;
-height:200px;
+padding-bottom:8px;
 position :relative;
 }
 .register {
@@ -60,10 +60,21 @@ padding-right: 13px;
 	color:red;
 }
 .register.sys { 
-position:relative;
-top:10px;
+	position:relative;
+	top:10px;
 }
-.control.panel {
+
+.register.x { 
+	background-color: rgba(255,0,0,0.2);
+}
+.register.y { 
+	background-color: rgba(0,255,0,0.2);
+}
+.register.z { 
+	background-color: rgba(0,0,255,0.2);
+}
+	
+	.control.panel {
 	width:480px;
 	background-color: rgba(0,0,0,0.1);
 	box-shadow: 0px 0px 1px 1px white inset;
@@ -78,7 +89,6 @@ cursor:none;
 .ttyoutput {
 	box-shadow: 0px 0px 1px 0px rgba(0,0,0,0.5);
 	position:absolute;
-	left:0px;
 	right:0px;
 	bottom:0px;
 	font-family: monospace;

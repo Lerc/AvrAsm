@@ -48,21 +48,19 @@ var AVR8 = function() {
 AVR8.__name__ = true;
 AVR8.prototype = {
 	clearRam: function() {
-		var _g = 0;
-		var _g1 = this.ram;
-		while(_g < _g1.length) {
-			var $byte = _g1[_g];
-			++_g;
-			$byte = 0;
+		var _g1 = 0;
+		var _g = this.ram.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			this.ram[i] = 0;
 		}
 	}
 	,clearProgMem: function() {
-		var _g = 0;
-		var _g1 = this.progMem;
-		while(_g < _g1.length) {
-			var word = _g1[_g];
-			++_g;
-			word = 0;
+		var _g1 = 0;
+		var _g = this.progMem.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			this.progMem[i] = 0;
 		}
 	}
 	,reset: function() {
@@ -1374,8 +1372,6 @@ AVR8.prototype = {
 			return this.apply2($bind(this,this._ldi),d32,k8);
 		case 61440:
 			var bit1 = 1 << (instruction & 7);
-			var nextPC = this.PC + 1;
-			var clocks = 1;
 			if((instruction & 2048) == 0) {
 				var k9 = (instruction & 1016) >> 3;
 				if(k9 > 63) {
@@ -1444,7 +1440,7 @@ AVR8.prototype = {
 					clocks = 2;
 					break;
 				case 768:
-					haxe_Log.trace("mulsu, fmul, fmuls, fmulsu unimplemented",{ fileName : "AVR8.hx", lineNumber : 1513, className : "AVR8", methodName : "exec"});
+					haxe_Log.trace("mulsu, fmul, fmuls, fmulsu unimplemented",{ fileName : "AVR8.hx", lineNumber : 1511, className : "AVR8", methodName : "exec"});
 					break;
 				}
 				break;
@@ -2092,10 +2088,10 @@ AVR8.prototype = {
 				this.ram[d28 + 1] = result6 >> 8 & 255;
 				break;
 			case 38912:
-				haxe_Log.trace("cbi sbic unimplemented",{ fileName : "AVR8.hx", lineNumber : 2104, className : "AVR8", methodName : "exec"});
+				haxe_Log.trace("cbi sbic unimplemented",{ fileName : "AVR8.hx", lineNumber : 2102, className : "AVR8", methodName : "exec"});
 				break;
 			case 39424:
-				haxe_Log.trace("sbi sbis unimplemented",{ fileName : "AVR8.hx", lineNumber : 2107, className : "AVR8", methodName : "exec"});
+				haxe_Log.trace("sbi sbis unimplemented",{ fileName : "AVR8.hx", lineNumber : 2105, className : "AVR8", methodName : "exec"});
 				break;
 			case 39936:case 40448:
 				var d29 = (instruction & 496) >> 4;
@@ -2546,7 +2542,7 @@ AVR8.prototype = {
 					result = "JMP " + hex4(k7 * 2);
 					break;
 				case 37902:case 37903:
-					var k8 = this.progMem[this.PC + 1];
+					var k8 = this.progMem[memLocation + 1];
 					k8 |= (instruction & 496) << 13 | (instruction & 1) << 16;
 					result = "CALL " + hex4(k8 * 2);
 					break;
@@ -2651,7 +2647,7 @@ Math.__name__ = true;
 var Audio = function() {
 	this.waveForm = Audio.sine;
 	this.ctx = new AudioContext();
-	this.sourceBuffer = this.ctx.createBuffer(2,20480,44100);
+	this.sourceBuffer = this.ctx.createBuffer(1,20480,44100);
 	var _g = [];
 	var _g1 = 0;
 	while(_g1 < 8) {
@@ -2674,7 +2670,7 @@ var Audio = function() {
 	this.source = this.ctx.createBufferSource();
 	this.source.buffer = this.sourceBuffer;
 	this.source.loop = true;
-	this.scriptNode = this.ctx.createScriptProcessor(1024,2,2);
+	this.scriptNode = this.ctx.createScriptProcessor(1024,1,1);
 	haxe_Log.trace("buffer size of script node is " + this.scriptNode.bufferSize,{ fileName : "Audio.hx", lineNumber : 50, className : "Audio", methodName : "new"});
 	this.scriptNode.onaudioprocess = $bind(this,this.generateAudioData);
 	this.source.connect(this.scriptNode);
@@ -2717,24 +2713,11 @@ Audio.prototype = {
 			var i = _g11++;
 			var voiceSample = 0.0;
 			var _g21 = 0;
-			while(_g21 < 4) {
+			while(_g21 < 8) {
 				var v1 = _g21++;
 				voiceSample += this.voices[v1].nextSample();
 			}
 			data[i] = voiceSample;
-		}
-		data = out.getChannelData(1);
-		var _g12 = 0;
-		var _g3 = data.length;
-		while(_g12 < _g3) {
-			var i1 = _g12++;
-			var voiceSample1 = 0.0;
-			var _g22 = 4;
-			while(_g22 < 8) {
-				var v2 = _g22++;
-				voiceSample1 += this.voices[v2].nextSample();
-			}
-			data[i1] = voiceSample1;
 		}
 	}
 	,__class__: Audio
@@ -3164,11 +3147,17 @@ var EmulatortHost = function() {
 	var _g = 0;
 	while(_g < 32) {
 		var i = _g++;
-		this.registerDiv[i] = EmulatortHost.makeDiv(this.registerBox,"register");
+		this.registerDiv[i] = EmulatortHost.makeDiv(this.registerBox,"register r" + i);
 	}
-	this.xDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sp");
-	this.yDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sp");
-	this.zDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sp");
+	this.registerDiv[26].classList.add("x");
+	this.registerDiv[27].classList.add("x");
+	this.registerDiv[28].classList.add("y");
+	this.registerDiv[29].classList.add("y");
+	this.registerDiv[30].classList.add("z");
+	this.registerDiv[31].classList.add("z");
+	this.xDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sp x");
+	this.yDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sp y");
+	this.zDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sp z");
 	this.spDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sp");
 	this.pcDiv = EmulatortHost.makeDiv(this.registerBox,"register sys pc");
 	this.sregDiv = EmulatortHost.makeDiv(this.registerBox,"register sys sreg");
@@ -3274,7 +3263,7 @@ var EmulatortHost = function() {
 		while(_gthis.keyBuffer.length > 10) _gthis.keyBuffer.pop();
 	});
 	var hexURL = this.getQueryVariable("hex");
-	haxe_Log.trace("hex url is : ",{ fileName : "EmulatortHost.hx", lineNumber : 265, className : "EmulatortHost", methodName : "new", customParams : [hexURL]});
+	haxe_Log.trace("hex url is : ",{ fileName : "EmulatortHost.hx", lineNumber : 272, className : "EmulatortHost", methodName : "new", customParams : [hexURL]});
 	if(hexURL != "") {
 		var request = new haxe_Http(hexURL);
 		request.onData = function(data) {
@@ -3669,7 +3658,7 @@ EmulatortHost.prototype = {
 		this.displayGenerator.clear();
 		this.magicPasteBufferindex = 0;
 		this.outputDiv.textContent = "[reset]";
-		haxe_Log.trace("[Hay! reset]",{ fileName : "EmulatortHost.hx", lineNumber : 628, className : "EmulatortHost", methodName : "reset"});
+		haxe_Log.trace("[Hay! reset]",{ fileName : "EmulatortHost.hx", lineNumber : 635, className : "EmulatortHost", methodName : "reset"});
 		this.logText = "Start of log:";
 	}
 	,loadHexFile: function(text,debugData) {
@@ -3688,7 +3677,7 @@ EmulatortHost.prototype = {
 			this.avr.writeProgMem(chunk.address,chunk.data);
 			totalData += chunk.data.length;
 		}
-		haxe_Log.trace("loaded " + totalData + " bytes",{ fileName : "EmulatortHost.hx", lineNumber : 658, className : "EmulatortHost", methodName : "loadCodeChunks"});
+		haxe_Log.trace("loaded " + totalData + " bytes in total",{ fileName : "EmulatortHost.hx", lineNumber : 667, className : "EmulatortHost", methodName : "loadCodeChunks"});
 		this.set_halted(false);
 	}
 	,handleFileDrop: function(e) {
