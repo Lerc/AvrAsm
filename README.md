@@ -17,7 +17,49 @@ The assembler leverages Math.js for some of the features.  This allows constant 
 
 ````
 
-Labels are identifiers ending in a colon.  Labels beginning with a . are local, scoped to the last global label
+Labels are identifiers ending in a colon.  Labels beginning with a dot ````.```` are local, scoped to the most recent global label
+
+There are multiple forms of definitions in the assembler. 
+
+* Constants 
+* String Replacement
+* Multi line macros with arguments
+* Code snippits 
+
+You can combine these aspects
+
+````
+.snip small_constant_divides
+  .use reciprocal_divider
+      scaledReciprocal(x) = round($80000 / x);
+
+  .macro divByN n 
+    // X/n => r19:r18 remainder r17
+      ldi r17,n
+      ldiy scaledReciprocal(n)
+      jmp DivUsingReciprocal
+  .endmacro
+
+  DivBy9: divByN 9
+  DivBy10: divByN 10
+  DivBy11: divByN 11
+  DivBy12: divByN 12
+  DivBy13: divByN 13
+  DivBy14: divByN 14
+  DivBy15: divByN 15
+  DivBy16: divByN 16
+.endsnip
+
+
+.snip reciprocal_divider 
+DivUsingReciprocal:    ; takes value in X, reciprocal in Y and divisor in r17 
+  .... code removed for brevity ....
+.endsnip  
+````
+
+Including ```` .use small_constant_divides ```` in the assembly will trigger the generation of the code in the snip which will in turn trigger the inclusion of the ```` reciprocal_divider ```` snip.  No matter how many times a snip is used, it will only be included once.
+
+
 
 ## Directives 
 
@@ -31,7 +73,7 @@ macros can be used where instructions are expected and can generate multiple ins
 
 #### .def
 ````
-  .def HL r26
+  .def XL r26
   .def move_to_r0 mov r0,
 
   move_to_r0 HL   // this will generate MOV r0,r26
