@@ -222,6 +222,7 @@ var label = makeToken("label",/^\w+:/);
 var local = makeToken("local label",/^\.\w+:/);
 var pseudoRegister = makeToken("X,Y, or Z",/^(?:X|Y|Z|W|x|y|z|w)\b/);
 var localLabelName = makeToken("local label name",/^\.\w+/);
+var real =  makeToken("Real",/^\d*\.\d+/);
 var uint =  makeToken("Integer",/^\d+/);
 var hexint =  makeToken("Hex Value",/^((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/);
 var identifier = makeToken("identifier",/^\w+/);
@@ -283,6 +284,7 @@ function tokenizeLine (line,definitions = {} ) {
   return result;
 }
 
+let predefinedFunctions = new Set("round floor ceil sin cos asin atan acos atan2 ln".split(" "));
 let defaultProxyHandler = {
   set : function (obj, prop, value) {
     obj[prop] = value;
@@ -293,6 +295,7 @@ let defaultProxyHandler = {
     return 0;
   },
   has : function (obj,prop) {
+    if (predefinedFunctions.has(prop)) return false;
     return true;
   }
 }
@@ -489,7 +492,7 @@ function assemble(mainFilename, loadFn) {
       return result;
     }
     catch  (e) {
-      fail("expression failed : " + e.message);
+      fail("expression '"+line+"' failed : " + e.message);
     }
   }
   
@@ -913,15 +916,24 @@ function assemble(mainFilename, loadFn) {
       if (look.token === endToken) {
           fail("more parameters expected for macro "+macro.name);
       }
-      return match(look.token);
+      let result=match(look.token);
+      if (look.token === bra) {
+        let depth = 0;
+        do {
+          if (look.token === bra)  depth+=1;
+          if (look.token === ket)  depth-=1;
+          result+=match(look.token);
+        } while (depth > 0);
+      }
+      return result;
     }
+
     let parameters={}
     for (let p of macro.parameters) {
         parameters[p]=getParameter();
     }
     macroStack.push(macro.name);
     let rx = new RegExp("\\b("+macro.parameters.join("|")+")\\b","g");
-    //console.log(rx);
     for (let macroLine of macro.lines) {
       let translatedLine = macroLine.replace(rx,match=>parameters[match]);
       //note("macro translated line");
@@ -1026,7 +1038,6 @@ function assemble(mainFilename, loadFn) {
   }
   function parse_standard_line(line) {
     var t = tokenizeLine(line,definitions);    
-    //if (pass==1) console.log( line, t);
     useTokens(t);     
     switch(look.token) {
       case directive: 
@@ -1117,7 +1128,6 @@ function assemble(mainFilename, loadFn) {
     instructions[op].parse=parse_highreg_imm8bit;    
   }
   for (let op of op_anyreg_imm3bit) {
-    console.log(op);
     instructions[op].parse=parse_anyreg_imm3bit;    
   }
   
