@@ -1,0 +1,51 @@
+.include 'avr.kas'
+.include 'ports.kas'
+
+.org 0
+	jmp start
+
+.org $40
+
+start:
+	sub r0,r0
+	ldi r16,$ff
+	out DDRB,r16
+	out PORTB,r0
+	set_stack_pointer RAMEND
+
+	ldi r16,$10
+
+	ldi r16,$01
+	out PORTB,r16
+
+.lp:
+	add r16,r16
+	adc r16,r0
+	out PORTB,r16
+	call delay
+	call delay
+	call delay
+	call delay
+	jmp .lp
+
+
+delay:
+	push r0
+	push r1
+	push r16
+	push r17
+	sub r17,r17
+	sub r16,r16
+	sub r1,r1
+	sub r0,r0
+.lp:
+	addi r16,1
+	adc r1,r0
+	adc r17,r0
+	brcc .lp
+	pop r17
+	pop r16
+	pop r1
+	pop r0
+	ret
+

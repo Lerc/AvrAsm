@@ -1,0 +1,72 @@
+
+	low(x)=x & $ff
+	high(x)= ( x >> 8 ) & $ff
+	.def XH r27
+	.def XL r26
+	.def YH r29
+	.def YL r28
+	.def ZH r31
+	.def ZL r30
+
+.macro rol reg
+	adc reg,reg
+.endmacro
+
+.macro lsl reg
+	add reg,reg
+.endmacro
+
+.macro clr reg
+	eor reg,reg
+.endmacro
+
+
+.macro addi reg,imm
+	subi reg,-imm
+.endmacro
+
+.macro ldx address
+	lds r26,address
+  lds r27,address+1
+.endmacro
+
+.macro ldy address
+	lds r28,address
+  lds r29,address+1
+.endmacro
+
+.macro ldz address
+	lds r30,address
+  lds r31,address+1
+.endmacro
+
+.macro ldix imm
+	ldi r26,low(imm)
+  ldi r27,high(imm)
+.endmacro
+
+.macro ldiy imm
+	ldi r28,low(imm)
+  ldi r29,high(imm)
+.endmacro
+
+.macro ldiz imm
+	ldi r30,low(imm)
+  ldi r31,high(imm)
+.endmacro
+
+.macro stx address
+	sts address,r26
+    sts address+1,r27
+.endmacro
+
+.macro sty address
+	sts address,r28
+  sts address+1,r29
+.endmacro
+
+.macro stz address
+	sts address,r30
+  sts address+1,r31
+.endmacro
+
