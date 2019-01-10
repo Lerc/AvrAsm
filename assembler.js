@@ -1153,9 +1153,7 @@ function assemble(mainFilename, loadFn) {
   //note(JSON.stringify(labels));
 
   for (let chunk of output) {
-    chunk.data = new Uint16Array(chunk.data);
     console.log(chunk);
   }
-  console.log(debugInfo)
   return {output,debugInfo};
 }
