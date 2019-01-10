@@ -1,4 +1,13 @@
 
+if ("undefined"=== typeof(Sugar)) {
+  let test =require("./sugar.min.js");
+  Sugar.extend();
+}
+
+if ("undefined"=== typeof(math)) {
+  global.math =require("./math.min.js");
+}
+
 var avrInstructionEncodings = {
   ADC:    "0001 11rd dddd rrrr",
   ADD:    "0000 11rd dddd rrrr",
@@ -300,7 +309,7 @@ let defaultProxyHandler = {
   }
 }
 
-function assemble(mainFilename, loadFn) {
+function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   var lineNumber = 0;
   var fileNumber = 0;
   var mathStateCore = {}
@@ -986,7 +995,7 @@ function assemble(mainFilename, loadFn) {
   }
 
   function parse_include() {
-    let includeName = look.value;
+    let includeName = match(stringLiteral).replace(/(^["'])|(["']$)/g,'');
     assembleFile(includeName);
   }
 
@@ -1081,9 +1090,15 @@ function assemble(mainFilename, loadFn) {
       error("reached end of file while in snippit: ",{filename,lineNumber:recordingSnippit.lineNumber});      
     }
   }
-
+  function loadFile(filename) {
+    try {
+      return loadFn(filename);
+    } catch (e) {
+      fail("Could not load file "+ filename);
+    }
+  }
   function assembleFile(filename) {
-    let lines = loadFn(filename).split('\n');
+    let lines = loadFile(filename).split('\n');
     let store = [lineNumber,fileNumber];
     console.log("assembling "+filename);
     debugInfo.fileList.push(filename);
@@ -1151,9 +1166,19 @@ function assemble(mainFilename, loadFn) {
   //console.log(mathState);
   //note(JSON.stringify(mathState));
   //note(JSON.stringify(labels));
+  output = output.filter((address,data)=>data>0);
 
   for (let chunk of output) {
+<<<<<<< HEAD
     console.log(chunk);
   }
   return {output,debugInfo};
 }
+=======
+    chunk.data = new Uint16Array(chunk.data);
+  }
+  return {output,debugInfo};
+}
+
+if ("undefined"!== typeof(module)) module.exports=assemble;
+>>>>>>> 5998d972b727bdba346ad3081efe61d7d4a9eac8

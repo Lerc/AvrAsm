@@ -1,0 +1,27 @@
+	GPIOR0 = 0x1E
+	GPIOR1 = 0x2A
+	GPIOR2 = 0x2B
+
+  PORTD = 0x12
+	DDRD = 0x11
+	PIND = 0x10
+
+	PORTC = 0x08
+	DDRC = 0x07
+  PINC = 0x06
+
+	PORTB = 0x05
+	DDRB = 0x04
+	PINB = 0x03
+	
+	RAMEND = 0x300
+
+	SPH = $3E
+	SPL = $3D
+
+.macro set_stack_pointer value
+	ldi r28,low(value)
+  out SPL,r28
+	ldi r28,high(value)
+  out SPH,r28
+.endmacro
