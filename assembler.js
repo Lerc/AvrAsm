@@ -1100,7 +1100,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   function assembleFile(filename) {
     let lines = loadFile(filename).split('\n');
     let store = [lineNumber,fileNumber];
-    console.log("assembling "+filename);
+    note("assembling "+filename);
     debugInfo.fileList.push(filename);
     fileNumber=debugInfo.fileList.length-1;
     //console.log(debugInfo);
@@ -1110,7 +1110,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   }
 
   function doPass(passNum=1) {
-    console.log("pass: "+passNum);
+    note("pass: "+passNum);
     pass=passNum;
 
     initPass();
@@ -1169,16 +1169,12 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   output = output.filter((address,data)=>data>0);
 
   for (let chunk of output) {
-<<<<<<< HEAD
-    console.log(chunk);
-  }
-  return {output,debugInfo};
-}
-=======
     chunk.data = new Uint16Array(chunk.data);
   }
+
+  note("generated "+output.reduce((a,b)=>a+b.data.byteLength,0) + " bytes in "+output.length+" chunks");
+
   return {output,debugInfo};
 }
 
 if ("undefined"!== typeof(module)) module.exports=assemble;
->>>>>>> 5998d972b727bdba346ad3081efe61d7d4a9eac8
