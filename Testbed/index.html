@@ -5,10 +5,11 @@
 	<link rel="stylesheet" href="style.css">
 	<link rel="stylesheet" href="codemirror.css">
 	<script src="jquery-3.2.1.min.js"></script>
+	<script src="codemirror-min.js"></script>
 	<script src="../sugar.min.js"></script>
 	<script src="../math.min.js"></script>
-	<script src="codemirror-min.js"></script>
 	<script src="../assembler.js"></script>
+	<script src="kwak8Carts.js"></script>
 	<script src="main.js"></script>
 
 	<style> 
@@ -18,23 +19,26 @@
 			left:0px;
 			right:0px;
 			top:0px;
+			bottom:0px;
 			}
 		#emulator {
 			position:absolute;
 			left:0px;
 			top:0px;
+			bottom:0px;
 		}	
 		#assembler {
 			position:absolute;
 			left:810px;
 			right:0px;
 			top:0px;
+			bottom:0px;
 		}
 	</style>
 	<script src="avr.js"></script>
 </head>
 <body>
-<div id="content">
+<div id="content" >
 <div id="emulator">
 	<div class="programlist"></div>
 	<div class="emulator host"> </div>
