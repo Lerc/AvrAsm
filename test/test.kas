@@ -29,6 +29,9 @@ start:
 	jmp .lp
 
 
+
+.org $8000
+
 delay:
 	push r0
 	push r1
@@ -48,4 +51,3 @@ delay:
 	pop r1
 	pop r0
 	ret
-

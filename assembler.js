@@ -1053,10 +1053,12 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
         parse_directive(match(directive));
         return;
       case label:
+        wordAlign();
         addLabel(look.value.slice(0,-1));
         match(label);
       break;
     case local:
+        wordAlign();
         addLocalLabel(look.value.slice(0,-1));
         match(local);
       break;
