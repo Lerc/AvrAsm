@@ -224,7 +224,7 @@ function makeToken(kind,pattern) {
   return result;
 }
 
-var directive = makeToken("directive",/^\.(?:macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use|def)\b/);
+var directive = makeToken("directive",/^\.(?:if|ifdef|else|endif|macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use|def)\b/);
 //var macro = makeToken("macro",/^[.]macro/);
 var register = makeToken("register",/^((?:R|r)(?:[0-9]|[12][0-9]|3[01]))\b/);
 var label = makeToken("label",/^\w+:/);
@@ -325,10 +325,13 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   var macros = {};
   var snippits = {};
   var usedSnippits = new Set();
-  var labels = {};
   var previousLabel = "";
   var macroStack = [];
-  var macroImplID =0; 
+  var lineParser = parse_standard_line;
+  var recordingMacro = null;  
+
+  var parseModeStack = []; 
+  
   function currentCodePosition() {
     return currentChunk.address+currentChunk.data.length;
   }
@@ -347,6 +350,10 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     definitions={};
     usedSnippits=new Set();
     macroStack = [];
+    parseModeStack = []; 
+    lineParser = parse_standard_line;
+    recordingMacro = null;  
+      
     previousLabel = "_start_of_program_";
     output = [];
     debugInfo={fileList:[],addressMap:{}};;
@@ -879,9 +886,6 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   }
 
 
-  var lineParser = parse_standard_line;
-
-  var recordingMacro = null;  
      
   function start_macro() {
     let name = match(identifier);
@@ -894,6 +898,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       }
     }
     recordingMacro = {name,parameters,lineNumber,lines:[]};
+    parseModeStack.push(lineParser);
     lineParser=record_macro_line;
   }
 
@@ -901,7 +906,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     if (line.trim()===".endmacro" ) {
       macros[recordingMacro.name] = recordingMacro;
       //note("added macro "+recordingMacro.name+" of "+recordingMacro.lines.length+ " lines");
-      lineParser=parse_standard_line;
+      lineParser=parseModeStack.pop();
     }
     else {
       recordingMacro.lines.push(line);
@@ -959,6 +964,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     let name = match(identifier);
     match(endToken);
     recordingSnippit = {name,lines:[], fileNumber, lineNumber};
+    parseModeStack.push(lineParser);
     lineParser=record_snippit_line;
   }
 
@@ -969,7 +975,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
 
       snippits[name].push(recordingSnippit);
       //note("added snippit "+recordingSnippit.name+" of "+recordingSnippit.lines.length+ " lines");
-      lineParser=parse_standard_line;
+      lineParser=parseModeStack.pop();
     }
     else {
       recordingSnippit.lines.push(line);
@@ -1012,8 +1018,19 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     definitions[name]=remainingTokens();
   }
 
+  function parse_ifdef() {
+    parseModeStack.push(lineParser);
+    let name = match(identifier);
+    lineParser =  definitions.hasOwnProperty(name)
+      ? ifdef_true
+      : ifdef_false;
+  }
+
   function parse_directive(kind) {
     switch (kind) {
+      case ".ifdef":
+        parse_ifdef(); 
+        break;
       case ".def":
         parse_def();
         break;
@@ -1040,6 +1057,10 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       case ".org":
         parse_org();
         break;
+      case ".else":
+      case ".endif":
+          fail(kind+" widthout matching .if .ifdef ");
+          break;
       default:
         fail("directive "+kind+" not implemented yet");
     }
@@ -1064,6 +1085,41 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     parse_asm();    
   }
 
+  function ifdef_true(line) {
+    switch(line.trim()) {
+      case ".endif":  
+        lineParser=parseModeStack.pop();
+        break;
+      case ".else":
+        lineParser=ifdef_true_else;
+        break;
+      default:  parse_standard_line(line);
+    }
+  }
+
+  function ifdef_true_else(line) {
+    if (line.trim()===".endif")  lineParser=parseModeStack.pop();
+  }
+
+  function ifdef_false_else(line) {
+    if (line.trim()===".endif") {
+      lineParser=parseModeStack.pop();
+    } else {
+      parse_standard_line(line);
+    }
+  }
+
+  function ifdef_false(line) {
+    switch(line.trim()) {
+      case ".endif":  
+        lineParser=parseModeStack.pop();
+        break;
+      case ".else":
+        lineParser= ifdef_false_else;
+    }
+  }
+
+  
   function assembleLine(line) {
     debugInfo.addressMap[currentCodePosition()]={lineNumber,fileNumber};
     lineParser(line);
@@ -1100,17 +1156,16 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   function assembleFile(filename) {
     let lines = loadFile(filename).split('\n');
     let store = [lineNumber,fileNumber];
-    note("assembling "+filename);
+    //note("assembling "+filename);
     debugInfo.fileList.push(filename);
     fileNumber=debugInfo.fileList.length-1;
-    //console.log(debugInfo);
     lineNumber=1;
     assembleLines(lines);
     [lineNumber,fileNumber] = store;
   }
 
   function doPass(passNum=1) {
-    note("pass: "+passNum);
+    //note("pass: "+passNum);
     pass=passNum;
 
     initPass();
@@ -1121,7 +1176,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
        usedSnippits.forEach(play_snippit) 
     }
     catch (e)  {
-      error("error on line "+ lineNumber+":  "+e.message,lineNumber);
+      error(`error in file ${fileNumber} on line ${lineNumber}:  ${e.message}`,lineNumber);
       throw e;
     }           
   }
