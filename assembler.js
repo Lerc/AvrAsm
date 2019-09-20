@@ -890,7 +890,9 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       if (look.token===identifier) {
         parameters.push(match(identifier));
       } else {
-        skipToken();
+        if ( (look.token === comma) || (look.token===colon) ) skipToken(); else {
+          fail(` ${look.token.kind} "${look.value}" not expected here.  Only identifiers separated by spaces, colons, or commas are allowed`);
+        }
       }
     }
     recordingMacro = {name,parameters,lineNumber,lines:[]};
