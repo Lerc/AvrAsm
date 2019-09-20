@@ -508,7 +508,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
   function parse_intExpression() {
     //console.log("intexpression ",look.token);
     if (!mightBeIntExpression(look.token)) {
-      fail("constant integer expression expected, found "+look.token);
+      fail("constant integer expression expected, found "+look.token.kind);
       return;
     }
     let line=""; 
@@ -948,7 +948,17 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       //note("macro translated line");
       //note("from:" +macroLine);
       //note("to  :" +translatedLine);
-      assembleLine(translatedLine);
+      try {
+        assembleLine(translatedLine);
+      }
+      catch (e) {
+        note("macro translated line");
+        note("from:" +macroLine);
+        note("to  :" +translatedLine);
+        throw e;
+      }
+
+      
     }
     macroStack.pop();
   }
