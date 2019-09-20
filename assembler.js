@@ -1176,7 +1176,8 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
        usedSnippits.forEach(play_snippit) 
     }
     catch (e)  {
-      error(`error in file ${fileNumber} on line ${lineNumber}:  ${e.message}`,lineNumber);
+      let filename = debugInfo.fileList[fileNumber];
+      error("error in "+filename+" on line "+ lineNumber+":  "+e.message,{filename,lineNumber});
       throw e;
     }           
   }
