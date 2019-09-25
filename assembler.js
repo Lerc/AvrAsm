@@ -8,6 +8,44 @@ if ("undefined"=== typeof(math)) {
   global.math =require("./math.min.js");
 }
 
+// Add a Register datatype to Math 
+function Register (value) {
+  if (Number.isInteger(value)  && value>=0 && value<=31)  {
+    this.value = value;
+  }
+}
+Register.prototype.isRegister = true;
+Register.prototype.toString = function () {
+  return 'r' + this.value;
+}
+
+math.typed.addType({
+  name: 'Register',
+  test: function (x) {
+    // test whether x is a valid register
+    return x && x.isRegister && x.value;
+  }
+})
+{
+  let compare = math.typed('compare', {
+    'Register, Register': (a,b) => math.compare(a.value, b.value)}
+    );
+  let smaller = math.typed('smaller', {
+    'Register, Register': (a,b) => math.smaller(a.value, b.value)}
+    );
+  let larger = math.typed('larger', {
+      'Register, Register': (a,b) => math.larger(a.value, b.value)}
+      );
+  let smallerEq = math.typed('smallerEq', {
+        'Register, Register': (a,b) => math.smallerEq(a.value, b.value)}
+        );
+  let largerEq = math.typed('largerEq', {
+          'Register, Register': (a,b) => math.largerEq(a.value, b.value)}
+          );
+           
+  math.import({compare,smaller,larger,smallerEq,largerEq});
+}
+
 var avrInstructionEncodings = {
   ADC:    "0001 11rd dddd rrrr",
   ADD:    "0000 11rd dddd rrrr",
@@ -224,7 +262,7 @@ function makeToken(kind,pattern) {
   return result;
 }
 
-var directive = makeToken("directive",/^\.(?:if|ifdef|else|endif|macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use|def)\b/);
+var directive = makeToken("directive",/^\.(?:if|ifdef|else|endif|note|fail|macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use|def)\b/);
 //var macro = makeToken("macro",/^[.]macro/);
 var register = makeToken("register",/^((?:R|r)(?:[0-9]|[12][0-9]|3[01]))\b/);
 var label = makeToken("label",/^\w+:/);
@@ -235,6 +273,7 @@ var real =  makeToken("Real",/^\d*\.\d+/);
 var uint =  makeToken("Integer",/^\d+/);
 var hexint =  makeToken("Hex Value",/^((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/);
 var identifier = makeToken("identifier",/^\w+/);
+var mathOnlyOperators =  makeToken("operator",/^(?:==|!=|>=|>|<=|<|\*|\/|\||\&|\!|^\|\[|\]|\.|\?)/);
 var equals =  makeToken("=",/^[=]/);
 var comma =  makeToken(",",/^[,]/);
 var minus =  makeToken("-",/^[-]/);
@@ -242,6 +281,7 @@ var plus =  makeToken("+",/^[+]/);
 var colon =  makeToken(":",/^[:]/);
 var bra =  makeToken("(",/^[(]/);
 var ket =  makeToken(")",/^[)]/);
+
 var stringLiteral =  makeToken("string",/^((["][^"]*["])|(['][^']*[']))/);
 
 //var whitespace =  makeToken("whitespace",/^[ ]+/);
@@ -250,6 +290,7 @@ var notsure =  makeToken("Don't know what this is",/^\s/);
 
 var endToken = {kind:"end"};
 
+ 
 function tokenizeLine (line,definitions = {} ) {
   var result =[];
   let text=line;
@@ -290,10 +331,13 @@ function tokenizeLine (line,definitions = {} ) {
     }         
   } while (match);
   result.text=text;
+  result.tokenText = result.reduce((a,b)=>a+b.value+" ","");
   return result;
 }
 
-let predefinedFunctions = new Set("round floor ceil sin cos asin atan acos atan2 ln".split(" "));
+let predefinedFunctions = new Set(
+  "isInteger,isNegative,isNumeric,hasNumericValue,isPositive,isZero,isNaN,typeOf,typeof,equalScalar,number,string,boolean,bignumber,complex,fraction,matrix,splitUnit,unaryMinus,unaryPlus,abs,apply,addScalar,cbrt,ceil,cube,exp,expm1,fix,floor,gcd,lcm,log10,log2,mod,multiplyScalar,multiply,nthRoot,sign,sqrt,square,subtract,xgcd,dotMultiply,bitAnd,bitNot,bitOr,bitXor,arg,conj,im,re,not,or,xor,concat,column,cross,diag,eye,filter,flatten,forEach,getMatrixDataType,identity,kron,map,ones,range,reshape,resize,row,size,squeeze,subset,transpose,ctranspose,zeros,erf,mode,prod,format,print,to,isPrime,numeric,divideScalar,pow,round,log,log1p,nthRoots,dotPow,dotDivide,lsolve,usolve,leftShift,rightArithShift,rightLogShift,and,compare,compareNatural,compareText,equal,equalText,smaller,smallerEq,larger,largerEq,deepEqual,unequal,partitionSelect,sort,max,min,unit,sparse,createUnit,acos,acosh,acot,acoth,acsc,acsch,asec,asech,asin,asinh,atan,atan2,atanh,cos,cosh,cot,coth,csc,csch,sec,sech,sin,sinh,tan,tanh,setCartesian,setDifference,setDistinct,setIntersect,setIsSubset,setMultiplicity,setPowerset,setSize,setSymDifference,setUnion,add,hypot,norm,dot,trace,index,parse,compile,evaluate,eval,parser,lup,qr,slu,lusolve,help,det,inv,expm,sqrtm,divide,distance,intersect,sum,mean,median,mad,variance,var,quantileSeq,std,combinations,combinationsWithRep,gamma,factorial,kldivergence,multinomial,permutations,pickRandom,random,randomInt,stirlingS2,bellNumbers,catalan,composition,simplify,derivative,rationalize,reviver,e,E,false,i,Infinity,LN10,LN2,LOG10E,LOG2E,NaN,null,phi,pi,PI,SQRT1_2,SQRT2,tau,true,version,atomicMass,avogadro,bohrMagneton,bohrRadius,boltzmann,classicalElectronRadius,conductanceQuantum,coulomb,deuteronMass,efimovFactor,electricConstant,electronMass,elementaryCharge,faraday,fermiCoupling,fineStructure,firstRadiation,gasConstant,gravitationConstant,gravity,hartreeEnergy,inverseConductanceQuantum,klitzing,loschmidt,magneticConstant,magneticFluxQuantum,molarMass,molarMassC12,molarPlanckConstant,molarVolume,neutronMass,nuclearMagneton,planckCharge,planckConstant,planckLength,planckMass,planckTemperature,planckTime,protonMass,quantumOfCirculation,reducedPlanckConstant,rydberg,sackurTetrode,secondRadiation,speedOfLight,stefanBoltzmann,thomsonCrossSection,vacuumImpedance,weakMixingAngle,wienDisplacement"
+  .split(","));
 let defaultProxyHandler = {
   set : function (obj, prop, value) {
     obj[prop] = value;
@@ -309,7 +353,7 @@ let defaultProxyHandler = {
   }
 }
 
-function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
+function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log) {
   var lineNumber = 0;
   var fileNumber = 0;
   var mathStateCore = {}
@@ -332,6 +376,21 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
 
   var parseModeStack = []; 
   
+  function error(...args) {
+    errorfn(...args);
+  }
+  
+  function note(...args) {
+    if (pass == 1) {
+      //only show notes on pass 1
+      notefn(...args)
+    }
+  }
+
+  for (let i=0;i<32;i++) {
+    let reg = "r"+i;
+    mathStateCore[reg]=new Register(i);
+  }
   function currentCodePosition() {
     return currentChunk.address+currentChunk.data.length;
   }
@@ -495,7 +554,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     return reg.from(1).toNumber();
   }
 
-  function mathEval(line) {
+  function mathEvaluate(line) {
     function hexToInt(s) {
       if (s[0]=="$") s=s.substr(1);        
       return parseInt(s,16);
@@ -504,7 +563,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     line=line.replace(/((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/g,hexToInt);
     //note("translated line: "+ line);
     try {
-      var result=math.eval(line,mathState);
+      var result=math.evaluate(line,mathState);
       return result;
     }
     catch  (e) {
@@ -535,7 +594,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       line+=" "+match(look.token);
       //note( line );
     } while ( look.token!==comma || bracketDepth!==0);
-    return(mathEval(line))        
+    return(mathEvaluate(line))        
   }
   function emit_LDST(pointer,register,predec,postinc,offset=0,store=false) {
     if (predec || postinc)  {
@@ -584,7 +643,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
 
       if (mightBeIntExpression(look.token)) {
         //let line=tokenList.from(tokenIndex-1).reduce( ((a,b)=>a+" "+b.value) ,"");
-        //offset = mathEval(line);           
+        //offset = mathEvaluate(line);           
         offset = parse_intExpression();
       } else {
         postInc=true; 
@@ -862,7 +921,7 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
     if (look.token !== endToken) {
       //var line=tokenList.from(tokenIndex-2).reduce( ((a,b)=>a+" "+b.value) ,"");
       var line = tokenList.text.from(tokenList[tokenIndex-2].pos);
-      mathEval(line);
+      mathEvaluate(line);
     } else {
       fail("couldn't figure out what this was at all")
     }
@@ -932,15 +991,17 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       if (look.token === endToken) {
           fail("more parameters expected for macro "+macro.name);
       }
-      let result=match(look.token);
-      if (look.token === bra) {
+      let result = "";
+      if (look.token !== bra) {
+        result=match(look.token);
+      } else {
         let depth = 0;
         do {
           if (look.token === bra)  depth+=1;
           if (look.token === ket)  depth-=1;
-          result+=match(look.token);
+          result+=match(look.token)+" ";
         } while (depth > 0);
-      }
+      }   
       return result;
     }
 
@@ -1038,8 +1099,27 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       : ifdef_false;
   }
 
+  function parse_if() {
+    //note("parsing "+tokenList.tokenText);
+    let expression = tokenList.tokenText.slice(4);
+    
+    //note("expression : ", expression );
+    let result = mathEvaluate(expression);    
+    //note("result:" + result);
+
+    parseModeStack.push(lineParser);
+    lineParser =  result
+      ? ifdef_true
+      : ifdef_false;
+    
+  }
+
+
   function parse_directive(kind) {
     switch (kind) {
+      case ".if":
+        parse_if();
+        break;
       case ".ifdef":
         parse_ifdef(); 
         break;
@@ -1073,6 +1153,13 @@ function assemble(mainFilename, loadFn, error=console.log, note=console.log) {
       case ".endif":
           fail(kind+" widthout matching .if .ifdef ");
           break;
+      case ".note":
+          note(tokenList.text.slice(6));
+        break;
+      case ".fail":
+            fail(tokenList.text.slice(6));
+          break;
+       
       default:
         fail("directive "+kind+" not implemented yet");
     }

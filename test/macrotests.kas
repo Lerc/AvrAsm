@@ -1,0 +1,200 @@
+.include 'avr.kas'
+.include 'ports.kas'
+
+.note I am a fish
+
+
+.macro outargs a b
+ .note a
+ .note b
+
+.endmacro
+
+outargs (fish cheese) cat
+
+.macro multiparm albatross,corgi,dingo,Fish
+	ldi r16, albatross
+	ldi r17,corgi
+	ldi r19,Fish
+	ldi r18,dingo
+.endmacro
+
+
+.macro rect left top width height color
+	ldi r24,left
+  ldi r25,top
+  ldi r26,color
+  ldi r16,width
+  ldi r17,height
+  call fillRect
+.endmacro
+
+.macro q xx,yy
+	ldi r24,xx
+.endmacro
+
+
+.macro macro_containing_if arg
+	.if arg 
+	.note pass
+	.else
+	.note fail
+  .endif
+
+	.if r10 < arg 
+	.note pass
+	.else
+	.note fail
+  .endif
+
+.endmacro
+
+.if r13
+.note pass
+.else
+.note fail
+.endif
+
+.if r14<r13
+.note fail
+.else
+.note pass
+.endif
+
+.if r13<r14
+.note pass
+.else
+.note fail
+.endif
+
+.if r14<=r13
+.note fail
+.else
+.note pass
+.endif
+
+.if r13<=r14
+.note pass
+.else
+.note fail
+.endif
+
+.if r14>r13
+.note pass
+.else
+.note fail
+.endif
+
+.if r13>r14
+.note fail
+.else
+.note pass
+.endif
+
+.if r14>=r13
+.note pass
+.else
+.note fail
+
+.endif
+.if r13>=r14
+.note fail
+.else
+.note pass
+.endif
+
+macro_containing_if r12
+
+quagmire = 4.3
+.if quagmire==27
+.note fail
+.else
+.note pass
+
+.endif
+
+.if isInteger(quagmire)
+.note fail
+.else
+.note pass
+.endif
+
+quagmire = 27
+.if quagmire==27
+.note pass
+.else
+.note fail
+.endif
+
+.if isInteger(quagmire)
+.note pass
+.else
+.note fail
+.endif
+
+.org 0
+	jmp start
+
+.org $40
+
+start:
+	q 5,2
+
+	sub r0,r0
+	ldi r16,$ff
+	out DDRB,r16
+	out PORTB,r0
+	set_stack_pointer RAMEND
+	
+	
+
+	ldi r16,$10
+
+	ldi r16,$01
+	out PORTB,r16
+
+.lp:
+	add r16,r16
+	adc r16,r0
+	out PORTB,r16
+	call delay
+	call delay
+	call delay
+	call delay
+	jmp .lp
+
+
+
+.org $8000
+
+delay:
+	push r0
+	push r1
+	push r16
+	push r17
+	sub r17,r17
+	sub r16,r16
+	sub r1,r1
+	sub r0,r0
+.lp:
+	addi r16,1
+	adc r1,r0
+	adc r17,r0
+	brcc .lp
+	pop r17
+	pop r16
+	pop r1
+	pop r0
+	ret
+
+	multiparm 25,96,128,4
+
+	rect 20,20,16,16,32
+
+fillRect:
+	ret
+
+
+.note This should now error because it's testing the error mechanism itself.
+.fail Deliberate failure to test fail.
+
