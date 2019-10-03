@@ -2,6 +2,7 @@
 .include 'ports.kas'
 
 .note I am a fish
+		simpleFunction(x) = x*2;
 
 
 .macro outargs a b
@@ -10,7 +11,11 @@
 
 .endmacro
 
-outargs (fish cheese) cat
+outargs (fish,cheese),cat
+
+outargs cat,(fish cheese)
+
+outargs simpleFunction(32),boing
 
 .macro multiparm albatross,corgi,dingo,Fish
 	ldi r16, albatross

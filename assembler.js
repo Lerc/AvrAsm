@@ -985,23 +985,34 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       return;
     }
     function getParameter() {
-      while( (look.token === comma) || (look.token === colon) ) {
-        skipToken();
-      }
+      let lastWasIdentifier=false;
       if (look.token === endToken) {
-          fail("more parameters expected for macro "+macro.name);
+        fail("more parameters expected for macro "+macro.name);
       }
       let result = "";
-      if (look.token !== bra) {
-        result=match(look.token);
-      } else {
-        let depth = 0;
-        do {
-          if (look.token === bra)  depth+=1;
-          if (look.token === ket)  depth-=1;
-          result+=match(look.token)+" ";
-        } while (depth > 0);
-      }   
+      let depth = 0;
+  
+      while (look.token !== endToken) {
+
+        if ( (depth==0)  &&  ((look.token === comma) || (look.token === colon)) ) {
+          skipToken();
+          return result;
+        }
+
+        if (look.token === bra)  {
+          depth+=1;
+        } else
+        if (look.token === ket) {
+          depth-=1;
+        }
+        let isIdentifier=look.token===identifier
+        if (isIdentifier && lastWasIdentifier) {
+          result+=" ";
+        }
+        
+        result+=match(look.token);
+        lastWasIdentifier=isIdentifier;
+      }
       return result;
     }
 
