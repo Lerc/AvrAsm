@@ -2,8 +2,15 @@
 .include 'ports.kas'
 
 .note I am a fish
-		simpleFunction(x) = x*2;
+	
+	simpleFunction(x) = x*2;
 
+	isreg = isRegister;
+
+.if	isRegister(16)
+
+.endif
+	
 
 .macro outargs a b
  .note a
@@ -132,6 +139,18 @@ quagmire = 27
 .endif
 
 .if isInteger(quagmire)
+.note pass
+.else
+.note fail
+.endif
+
+.if isRegister(27)
+.note fail
+.else
+.note pass
+.endif
+
+.if isRegister(r27)
 .note pass
 .else
 .note fail
