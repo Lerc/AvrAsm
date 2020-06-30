@@ -30,6 +30,13 @@ math.typed.addType({
   let compare = math.typed('compare', {
     'Register, Register': (a,b) => math.compare(a.value, b.value)}
     );
+  let equal = math.typed('equal', {
+    'Register, Register': (a,b) => math.equal(a.value, b.value)}
+    );
+  let unequal = math.typed('unequal', {
+    'Register, Register': (a,b) => math.unequal(a.value, b.value)}
+    );
+    
   let smaller = math.typed('smaller', {
     'Register, Register': (a,b) => math.smaller(a.value, b.value)}
     );
@@ -43,8 +50,12 @@ math.typed.addType({
           'Register, Register': (a,b) => math.largerEq(a.value, b.value)}
           );
   let isRegister = a=>!!a.isRegister;
+
+  let isLabel = math.typed('isLabel', {
+      'string': (a) => typeof a === "string"}
+      );
   
-  math.import({compare,smaller,larger,smallerEq,largerEq,isRegister});
+  math.import({compare,smaller,larger,smallerEq,largerEq,isRegister,equal,unequal,isLabel});
 
   console.log("math.evaluate",math.evaluate("isRegister(r16)",{r16:new Register(16)}) );
 }
@@ -57,10 +68,10 @@ var avrInstructionEncodings = {
   AND:    "0010 00rd dddd rrrr",
   ANDI:   "0111 KKKK dddd KKKK",
   ASR:    "1001 010d dddd 0101",
-  BCLR:   "1001 0100 1sss 1000", //*
+  BCLR:   "1001 0100 1sss 1000", 
   BLD:    "1111 100d dddd 0bbb", 
-  BRBC:   "1111 01kk kkkk ksss",//*
-  BRBS:   "1111 00kk kkkk ksss",//*
+  BRBC:   "1111 01kk kkkk ksss",
+  BRBS:   "1111 00kk kkkk ksss",
   BRCC:   "1111 01kk kkkk k000",
   BRCS:   "1111 00kk kkkk k000",
   BREAK:  "1001 0101 1001 1000",
@@ -80,10 +91,10 @@ var avrInstructionEncodings = {
   BRTS:   "1111 00kk kkkk k110",
   BRVC:   "0111 01kk kkkk k001",
   BRVS:   "0111 00kk kkkk k001",
-  BSET:   "1001 0100 0sss 1000", //*
+  BSET:   "1001 0100 0sss 1000", 
   BST:    "1111 101d dddd 0bbb",
   CALL:   "1001 010k kkkk 111k kkkk kkkk kkkk kkkk", //*
-  CBI:    "1001 1000 AAAA Abbb", //*
+  CBI:    "1001 1000 AAAA Abbb", 
   CLC:    "1001 0100 1000 1000", 
   CLH:    "1001 0100 1101 1000",
   CLI:    "1001 0100 1111 1000",
@@ -158,14 +169,14 @@ var avrInstructionEncodings = {
   SUB:    "0001 10rd dddd rrrr",
   SUBI:   "0101 KKKK dddd KKKK",
   SWAP:   "1001 010d dddd 0010",
-  TST:    "0010 00dd dddd dddd",
+  //TST:    "0010 00dd dddd dddd", is and Rd,Rd
   WDR:    "1001 0101 1010 1000",
 
   LD:""
 }
 
 var op_plain = "BREAK CLC CLH CLI CLN CLS CLT CLV CLZ RET".split(" ");
-var op_anyreg = "ASR COM DEC INC LSR NEG POP PUSH ROR SWAP TST".split(" ");
+var op_anyreg = "ASR COM DEC INC LSR NEG POP PUSH ROR SWAP".split(" ");
 var op_anyreg_anyreg = "ADC ADD AND CP CPC CPSE EOR MOV MUL OR SBC SUB".split(" ");
 var op_highreg_imm8bit = "ANDI CPI LDI ORI SBCI SUBI".split(" ");
 var op_anyreg_imm3bit = "BLD BST SBRC SBRS".split(" ");
@@ -261,87 +272,83 @@ function makeInstructionFromTemplate(template) {
 
 var rules = [];
 function makeToken(kind,pattern) {
-  var result = {kind,pattern}
+  var subExpression=pattern.source;
+
+  pattern=new RegExp(subExpression);
+  var result = {kind,pattern,subExpression}
   rules.push(result);
   return result;
 }
 
-var directive = makeToken("directive",/^\.(?:if|ifdef|else|endif|note|fail|macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use|def)\b/);
-//var macro = makeToken("macro",/^[.]macro/);
-var register = makeToken("register",/^((?:R|r)(?:[0-9]|[12][0-9]|3[01]))\b/);
-var label = makeToken("label",/^\w+:/);
-var local = makeToken("local label",/^\.\w+:/);
-var pseudoRegister = makeToken("X,Y, or Z",/^(?:X|Y|Z|W|x|y|z|w)\b/);
-var localLabelName = makeToken("local label name",/^\.\w+/);
-var real =  makeToken("Real",/^\d*\.\d+/);
-var uint =  makeToken("Integer",/^\d+/);
-var hexint =  makeToken("Hex Value",/^((?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/);
-var identifier = makeToken("identifier",/^\w+/);
-var mathOnlyOperators =  makeToken("operator",/^(?:==|!=|>=|>|<=|<|\*|\/|\||\&|\!|^\|\[|\]|\.|\?)/);
-var equals =  makeToken("=",/^[=]/);
-var comma =  makeToken(",",/^[,]/);
-var minus =  makeToken("-",/^[-]/);
-var plus =  makeToken("+",/^[+]/);
-var colon =  makeToken(":",/^[:]/);
-var bra =  makeToken("(",/^[(]/);
-var ket =  makeToken(")",/^[)]/);
+function combinedMatcher(list) {
+  let combined = list.map(({kind,pattern,subExpression})=>"("+subExpression+")").join("|");
 
-var stringLiteral =  makeToken("string",/^((["][^"]*["])|(['][^']*[']))/);
+  let regex = new RegExp(combined,"g");
+
+  return function(text) {
+    let matches =Array.from(text.matchAll(regex)).map(
+      function (match) {
+        let index=1;
+        while (index < match.length & !match[index] ) index++;
+        let pos=match.index;
+        let value = match[0];
+        let token = list[index-1];
+        return {pos,value,token};
+      }
+    );
+    return matches;
+  }  
+}
+
+var comment =  makeToken("comment",/(?:(?:\/\/)|(?:[\;])).*/);
+
+var directive = makeToken("directive",/\.(?:if|ifdef|else|endif|note|fail|report|macro|endmacro|include|snip|endsnip|org|dw|word|db|byte|use|def)\b/);
+//var macro = makeToken("macro",/^[.]macro/);
+var register = makeToken("register",/(?:(?:R|r)(?:[0-9]|[12][0-9]|3[01]))\b/);
+var label = makeToken("label",/\w+:/);
+var local = makeToken("local label",/\.\w+:/);
+var pseudoRegister = makeToken("X,Y, or Z",/(?:X|Y|Z|W|x|y|z|w)\b/);
+var localLabelName = makeToken("local label name",/\.\w+/);
+var real =  makeToken("Real",/\d*\.\d+/);
+var uint =  makeToken("Integer",/\d+/);
+var hexint =  makeToken("Hex Value",/(?:(?:(?:0[xX])|(?:[$]))[0-9a-fA-F]+)/);
+var identifier = makeToken("identifier",/\w+/);
+var mathOnlyOperators =  makeToken("operator",/(?:==|!=|>=|>|<=|<|\*|\/|\||\&|\!|^\|\[|\]|\.|\?)/);
+var equals =  makeToken("=",/[=]/);
+var comma =  makeToken(",",/[,]/);
+var minus =  makeToken("-",/[-]/);
+var plus =  makeToken("+",/[+]/);
+var colon =  makeToken(":",/[:]/);
+var bra =  makeToken("(",/[(]/);
+var ket =  makeToken(")",/[)]/);
+
+
+var stringLiteral =  makeToken("string",/(?:(?:["][^"]*["])|(?:['][^']*[']))/);
 
 //var whitespace =  makeToken("whitespace",/^[ ]+/);
 
-var notsure =  makeToken("Don't know what this is",/^\s/);
-
+var whitespace =  makeToken("WhiteSpace",/\s+/);
+var unknownMatch = makeToken("Don't know what this is",/\S+/);
 var endToken = {kind:"end"};
 
- 
+let matchLine = combinedMatcher(rules);
+
 function tokenizeLine (line,definitions = {} ) {
-  var result =[];
-  let text=line;
+  let result = matchLine(line).
+    filter(  ({token})=>token!==whitespace&&token!==comment  ).
+    map(
+      ({pos,value,token})=>
+      definitions.hasOwnProperty(value)?definitions[value]:{pos,value,token}
+  ).flat(1);
   result.text=line;
-  var pos=0;
-  var match;
-  do  {
-    match=/^\s+/.exec(line);
-    if (match) {
-      value=match[0];
-      pos+=value.length;
-      line=line.from(value.length);
-    }
-    match=/^((\/\/)|([\;]))/.exec(line);
-    if (match) {
-      //the rest is comment so exit early
-      result.text=text.substring(0,pos);
-      return result;
-    }
-    //todo: match single and double quote spans
-    //todo: match out comments 
-    for (let rule of rules) {
-      match= rule.pattern.exec(line);
-      if (match) {
-        let value = match[0];
-        if (value.length <=0 ) {
-          console.log("zero length match", rule);
-          return;
-        }
-        pos+=match.index;
-        if (definitions.hasOwnProperty(value)) {          
-          result=[...result,...definitions[value]];
-        } else result.push({token:rule, value,pos});        
-        line=line.from(match.index+value.length);
-        pos+=value.length;
-        break;
-      }     
-    }         
-  } while (match);
-  result.text=text;
   result.tokenText = result.reduce((a,b)=>a+b.value+" ","");
   return result;
 }
 
 let predefinedFunctions = new Set(
-  "isRegister,isInteger,isNegative,isNumeric,,hasNumericValue,isPositive,isZero,isNaN,typeOf,typeof,equalScalar,number,string,boolean,bignumber,complex,fraction,matrix,splitUnit,unaryMinus,unaryPlus,abs,apply,addScalar,cbrt,ceil,cube,exp,expm1,fix,floor,gcd,lcm,log10,log2,mod,multiplyScalar,multiply,nthRoot,sign,sqrt,square,subtract,xgcd,dotMultiply,bitAnd,bitNot,bitOr,bitXor,arg,conj,im,re,not,or,xor,concat,column,cross,diag,eye,filter,flatten,forEach,getMatrixDataType,identity,kron,map,ones,range,reshape,resize,row,size,squeeze,subset,transpose,ctranspose,zeros,erf,mode,prod,format,print,to,isPrime,numeric,divideScalar,pow,round,log,log1p,nthRoots,dotPow,dotDivide,lsolve,usolve,leftShift,rightArithShift,rightLogShift,and,compare,compareNatural,compareText,equal,equalText,smaller,smallerEq,larger,largerEq,deepEqual,unequal,partitionSelect,sort,max,min,unit,sparse,createUnit,acos,acosh,acot,acoth,acsc,acsch,asec,asech,asin,asinh,atan,atan2,atanh,cos,cosh,cot,coth,csc,csch,sec,sech,sin,sinh,tan,tanh,setCartesian,setDifference,setDistinct,setIntersect,setIsSubset,setMultiplicity,setPowerset,setSize,setSymDifference,setUnion,add,hypot,norm,dot,trace,index,parse,compile,evaluate,eval,parser,lup,qr,slu,lusolve,help,det,inv,expm,sqrtm,divide,distance,intersect,sum,mean,median,mad,variance,var,quantileSeq,std,combinations,combinationsWithRep,gamma,factorial,kldivergence,multinomial,permutations,pickRandom,random,randomInt,stirlingS2,bellNumbers,catalan,composition,simplify,derivative,rationalize,reviver,e,E,false,i,Infinity,LN10,LN2,LOG10E,LOG2E,NaN,null,phi,pi,PI,SQRT1_2,SQRT2,tau,true,version,atomicMass,avogadro,bohrMagneton,bohrRadius,boltzmann,classicalElectronRadius,conductanceQuantum,coulomb,deuteronMass,efimovFactor,electricConstant,electronMass,elementaryCharge,faraday,fermiCoupling,fineStructure,firstRadiation,gasConstant,gravitationConstant,gravity,hartreeEnergy,inverseConductanceQuantum,klitzing,loschmidt,magneticConstant,magneticFluxQuantum,molarMass,molarMassC12,molarPlanckConstant,molarVolume,neutronMass,nuclearMagneton,planckCharge,planckConstant,planckLength,planckMass,planckTemperature,planckTime,protonMass,quantumOfCirculation,reducedPlanckConstant,rydberg,sackurTetrode,secondRadiation,speedOfLight,stefanBoltzmann,thomsonCrossSection,vacuumImpedance,weakMixingAngle,wienDisplacement"
+  "isRegister,isInteger,isNegative,isNumeric,isLabel,hasNumericValue,isPositive,isZero,isNaN,typeOf,typeof,equalScalar,number,string,boolean,bignumber,complex,fraction,matrix,splitUnit,unaryMinus,unaryPlus,abs,apply,addScalar,cbrt,ceil,cube,exp,expm1,fix,floor,gcd,lcm,log10,log2,mod,multiplyScalar,multiply,nthRoot,sign,sqrt,square,subtract,xgcd,dotMultiply,bitAnd,bitNot,bitOr,bitXor,arg,conj,im,re,not,or,xor,concat,column,cross,diag,eye,filter,flatten,forEach,getMatrixDataType,identity,kron,map,ones,range,reshape,resize,row,size,squeeze,subset,transpose,ctranspose,zeros,erf,mode,prod,format,print,to,isPrime,numeric,divideScalar,pow,round,log,log1p,nthRoots,dotPow,dotDivide,lsolve,usolve,leftShift,rightArithShift,rightLogShift,and,compare,compareNatural,compareText,equal,equalText,smaller,smallerEq,larger,largerEq,deepEqual,unequal,partitionSelect,sort,max,min,unit,sparse,createUnit,acos,acosh,acot,acoth,acsc,acsch,asec,asech,asin,asinh,atan,atan2,atanh,cos,cosh,cot,coth,csc,csch,sec,sech,sin,sinh,tan,tanh,setCartesian,setDifference,setDistinct,setIntersect,setIsSubset,setMultiplicity,setPowerset,setSize,setSymDifference,setUnion,add,hypot,norm,dot,trace,index,parse,compile,evaluate,eval,parser,lup,qr,slu,lusolve,help,det,inv,expm,sqrtm,divide,distance,intersect,sum,mean,median,mad,variance,var,quantileSeq,std,combinations,combinationsWithRep,gamma,factorial,kldivergence,multinomial,permutations,pickRandom,random,randomInt,stirlingS2,bellNumbers,catalan,composition,simplify,derivative,rationalize,reviver,e,E,false,i,Infinity,LN10,LN2,LOG10E,LOG2E,NaN,null,phi,pi,PI,SQRT1_2,SQRT2,tau,true,version,atomicMass,avogadro,bohrMagneton,bohrRadius,boltzmann,classicalElectronRadius,conductanceQuantum,coulomb,deuteronMass,efimovFactor,electricConstant,electronMass,elementaryCharge,faraday,fermiCoupling,fineStructure,firstRadiation,gasConstant,gravitationConstant,gravity,hartreeEnergy,inverseConductanceQuantum,klitzing,loschmidt,magneticConstant,magneticFluxQuantum,molarMass,molarMassC12,molarPlanckConstant,molarVolume,neutronMass,nuclearMagneton,planckCharge,planckConstant,planckLength,planckMass,planckTemperature,planckTime,protonMass,quantumOfCirculation,reducedPlanckConstant,rydberg,sackurTetrode,secondRadiation,speedOfLight,stefanBoltzmann,thomsonCrossSection,vacuumImpedance,weakMixingAngle,wienDisplacement"
   .split(","));
+
 let defaultProxyHandler = {
   set : function (obj, prop, value) {
     obj[prop] = value;
@@ -445,8 +452,8 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     let result = previousLabel;
     if (macroStack.length>0) result+="_"+lineNumber+"_"+macroStack.join('_');
     return result
-
   }
+
   function addLocalLabel(id) {
     if (pass!=1) return; 
     let fullName = localLabelContext()+id;
@@ -542,6 +549,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       getToken();
       return result;
     } 
+    console.log({look,tokenType});
     fail('expected '+ tokenType.kind+" found "+look.token.kind+ " ("+look.value+")");
     return "";    
   }
@@ -993,7 +1001,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     function getParameter() {
       let lastWasIdentifier=false;
       if (look.token === endToken) {
-        fail("more parameters expected for macro "+macro.name);
+        fail(`more parameters expected for macro ${macro.name} expected ${macro.parameters.length}`);
       }
       let result = "";
       let depth = 0;
@@ -1171,12 +1179,15 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
           fail(kind+" widthout matching .if .ifdef ");
           break;
       case ".note":
-          note(tokenList.text.slice(6));
+          note(tokenList.text.slice(tokenList.text.indexOf(".note")+6));
         break;
+      case ".report": {
+          let line= tokenList.slice(1).map(a=>a.value).join(" ");
+          note(line);
+        } break;  
       case ".fail":
-            fail(tokenList.text.slice(6));
-          break;
-       
+          fail(tokenList.text.slice(tokenList.text.indexOf(".fail")+6));
+          break; 
       default:
         fail("directive "+kind+" not implemented yet");
     }
@@ -1346,7 +1357,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     chunk.data = new Uint16Array(chunk.data);
   }
 
-  note("generated "+output.reduce((a,b)=>a+b.data.byteLength,0) + " bytes in "+output.length+" chunks");
+  notefn("generated "+output.reduce((a,b)=>a+b.data.byteLength,0) + " bytes in "+output.length+" chunks");
 
   return {output,debugInfo};
 }
