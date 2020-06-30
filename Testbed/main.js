@@ -83,6 +83,32 @@ function init() {
     return editorDocuments[name].doc;
   }
 
+  function filesAsJSON() {
+    let result = {};
+    for (let i in editorDocuments) {
+      result[i] = editorDocuments[i].doc.getValue();
+    }
+    return JSON.stringify(result);
+  }
+
+  function filesFromJSON(jsonData) {
+    let files=JSON.parse(jsonData);
+    cleartabs();
+    for (let name of Object.keys(files)) {
+      addTab(name,files[name]);
+    }
+  }
+
+  function storeFiles(id="quicksave",store=localStorage) {
+    store.setItem(id,filesAsJSON());
+  } 
+
+  function restoreFiles(id="quicksave",store=localStorage) {
+    let data=store.getItem(id);
+    if (!data) return;
+    filesFromJSON(data);
+  }
+
   function showLine(filename,lineNumber) {
     selectEditor(filename);
     editor.scrollIntoView(lineNumber-1,0,50);
@@ -142,7 +168,8 @@ function init() {
 
   function assembleEditorContents() {
     clearMarks();
-    outputBox[0].value='';
+    storeFiles();
+    outputBox[0].value='Assembling...\n';
     return assemble("Main",loadFile,reportError,outLine);   
   }
 
@@ -260,7 +287,10 @@ function init() {
   }
   addTab("extra","");
 
-  selectEditor("Main");
+  restoreFiles();
+
+  selectTab(document.querySelector("ul.tabs>li"))
+  
 }
 
 CodeMirror.defineSimpleMode("kasm", {
