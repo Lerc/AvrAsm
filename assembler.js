@@ -345,6 +345,63 @@ function tokenizeLine (line,definitions = {} ) {
   return result;
 }
 
+function createSourceIterator(mainFilename, loadFn, debugInfo, definitions) {
+  let stack = [];
+
+  function loadLines(filename) {
+    let text;
+    try {
+      text = loadFn(filename);
+    } catch (e) {
+      throw new Error("Could not load file " + filename);
+    }
+    let existing = debugInfo.fileList.indexOf(filename);
+    let fileNumber = existing >= 0 ? existing : debugInfo.fileList.push(filename) - 1;
+    return {filename, fileNumber, lines:text.split('\n'), index:0};
+  }
+
+  return {
+    reset() {
+      stack = [loadLines(mainFilename)];
+    },
+    include(filename) {
+      stack.push(loadLines(filename));
+    },
+    includeStack() {
+      return stack.map(a=>a.filename);
+    },
+    next() {
+      while (stack.length > 0) {
+        let current = stack[stack.length-1];
+        if (current.index >= current.lines.length) {
+          stack.pop();
+          continue;
+        }
+        let lineNumber = current.index + 1;
+        let text = current.lines[current.index++];
+        return {
+          filename: current.filename,
+          fileNumber: current.fileNumber,
+          lineNumber,
+          text,
+          tokens: tokenizeLine(text,definitions)
+        };
+      }
+      return null;
+    }
+  };
+}
+
+function ParserContext(pass=1) {
+  return {
+    pass,
+    includeStack: [],
+    blockStack: [],
+    expansionContext: {macroCallStack: []},
+    source: null
+  };
+}
+
 let predefinedFunctions = new Set(
   "isRegister,isInteger,isNegative,isNumeric,isLabel,hasNumericValue,isPositive,isZero,isNaN,typeOf,typeof,equalScalar,number,string,boolean,bignumber,complex,fraction,matrix,splitUnit,unaryMinus,unaryPlus,abs,apply,addScalar,cbrt,ceil,cube,exp,expm1,fix,floor,gcd,lcm,log10,log2,mod,multiplyScalar,multiply,nthRoot,sign,sqrt,square,subtract,xgcd,dotMultiply,bitAnd,bitNot,bitOr,bitXor,arg,conj,im,re,not,or,xor,concat,column,cross,diag,eye,filter,flatten,forEach,getMatrixDataType,identity,kron,map,ones,range,reshape,resize,row,size,squeeze,subset,transpose,ctranspose,zeros,erf,mode,prod,format,print,to,isPrime,numeric,divideScalar,pow,round,log,log1p,nthRoots,dotPow,dotDivide,lsolve,usolve,leftShift,rightArithShift,rightLogShift,and,compare,compareNatural,compareText,equal,equalText,smaller,smallerEq,larger,largerEq,deepEqual,unequal,partitionSelect,sort,max,min,unit,sparse,createUnit,acos,acosh,acot,acoth,acsc,acsch,asec,asech,asin,asinh,atan,atan2,atanh,cos,cosh,cot,coth,csc,csch,sec,sech,sin,sinh,tan,tanh,setCartesian,setDifference,setDistinct,setIntersect,setIsSubset,setMultiplicity,setPowerset,setSize,setSymDifference,setUnion,add,hypot,norm,dot,trace,index,parse,compile,evaluate,eval,parser,lup,qr,slu,lusolve,help,det,inv,expm,sqrtm,divide,distance,intersect,sum,mean,median,mad,variance,var,quantileSeq,std,combinations,combinationsWithRep,gamma,factorial,kldivergence,multinomial,permutations,pickRandom,random,randomInt,stirlingS2,bellNumbers,catalan,composition,simplify,derivative,rationalize,reviver,e,E,false,i,Infinity,LN10,LN2,LOG10E,LOG2E,NaN,null,phi,pi,PI,SQRT1_2,SQRT2,tau,true,version,atomicMass,avogadro,bohrMagneton,bohrRadius,boltzmann,classicalElectronRadius,conductanceQuantum,coulomb,deuteronMass,efimovFactor,electricConstant,electronMass,elementaryCharge,faraday,fermiCoupling,fineStructure,firstRadiation,gasConstant,gravitationConstant,gravity,hartreeEnergy,inverseConductanceQuantum,klitzing,loschmidt,magneticConstant,magneticFluxQuantum,molarMass,molarMassC12,molarPlanckConstant,molarVolume,neutronMass,nuclearMagneton,planckCharge,planckConstant,planckLength,planckMass,planckTemperature,planckTime,protonMass,quantumOfCirculation,reducedPlanckConstant,rydberg,sackurTetrode,secondRadiation,speedOfLight,stefanBoltzmann,thomsonCrossSection,vacuumImpedance,weakMixingAngle,wienDisplacement"
   .split(","));
@@ -381,11 +438,8 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
   var snippits = {};
   var usedSnippits = new Set();
   var previousLabel = "";
-  var macroStack = [];
-  var lineParser = parse_standard_line;
-  var recordingMacro = null;  
-
-  var parseModeStack = []; 
+  var parserContext = ParserContext();
+  var macroStack = parserContext.expansionContext.macroCallStack;
   
   function error(...args) {
     errorfn(...args);
@@ -420,14 +474,14 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     snippits={};
     definitions={};
     usedSnippits=new Set();
-    macroStack = [];
-    parseModeStack = []; 
-    lineParser = parse_standard_line;
-    recordingMacro = null;  
-      
+    parserContext = ParserContext(pass);
+    macroStack = parserContext.expansionContext.macroCallStack;
     previousLabel = "_start_of_program_";
     output = [];
-    debugInfo={fileList:[],addressMap:{}};;
+    debugInfo={fileList:[],addressMap:{}};
+    parserContext.source = createSourceIterator(mainFilename, loadFn, debugInfo, definitions);
+    parserContext.source.reset();
+    parserContext.includeStack = parserContext.source.includeStack();
     newChunk();
 
   }
@@ -972,29 +1026,14 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
         }
       }
     }
-    recordingMacro = {name,parameters,lineNumber,lines:[]};
-    parseModeStack.push(lineParser);
-    lineParser=record_macro_line;
+    parserContext.blockStack.push({type:"macro", recordingMacro:{name,parameters,lineNumber,lines:[]}});
   }
-
-  function record_macro_line(line) {
-    if (line.trim()===".endmacro" ) {
-      macros[recordingMacro.name] = recordingMacro;
-      //note("added macro "+recordingMacro.name+" of "+recordingMacro.lines.length+ " lines");
-      lineParser=parseModeStack.pop();
-    }
-    else {
-      recordingMacro.lines.push(line);
-    }
-  }
-
 
   function play_macro(macro) {
-    //note("macro "+macro.name+"  "+macro.parameters.length);
     if (macro.parameters.length === 0) {
       match(endToken);
       macroStack.push(macro.name);
-      macro.lines.forEach(assembleLine);
+      macro.lines.forEach(line=>assembleTextLine(line));
       macroStack.pop();
       return;
     }
@@ -1005,7 +1044,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       }
       let result = "";
       let depth = 0;
-  
+
       while (look.token !== endToken) {
 
         if ( (depth==0)  &&  ((look.token === comma) || (look.token === colon)) ) {
@@ -1023,7 +1062,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
         if (isIdentifier && lastWasIdentifier) {
           result+=" ";
         }
-        
+
         result+=match(look.token);
         lastWasIdentifier=isIdentifier;
       }
@@ -1038,11 +1077,8 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     let rx = new RegExp("\\b("+macro.parameters.join("|")+")\\b","g");
     for (let macroLine of macro.lines) {
       let translatedLine = macroLine.replace(rx,match=>parameters[match]);
-      //note("macro translated line");
-      //note("from:" +macroLine);
-      //note("to  :" +translatedLine);
       try {
-        assembleLine(translatedLine);
+        assembleTextLine(translatedLine);
       }
       catch (e) {
         note("macro translated line");
@@ -1050,34 +1086,14 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
         note("to  :" +translatedLine);
         throw e;
       }
-
-      
     }
     macroStack.pop();
   }
 
-  var recordingSnippit = null;  
-     
   function start_snippit() {
     let name = match(identifier);
     match(endToken);
-    recordingSnippit = {name,lines:[], fileNumber, lineNumber};
-    parseModeStack.push(lineParser);
-    lineParser=record_snippit_line;
-  }
-
-  function record_snippit_line(line) {
-    if (line.trim()===".endsnip" ) {
-      let name = recordingSnippit.name;
-      if (!snippits.hasOwnProperty(name)) snippits[name] = [];
-
-      snippits[name].push(recordingSnippit);
-      //note("added snippit "+recordingSnippit.name+" of "+recordingSnippit.lines.length+ " lines");
-      lineParser=parseModeStack.pop();
-    }
-    else {
-      recordingSnippit.lines.push(line);
-    }
+    parserContext.blockStack.push({type:"snip", recordingSnippit:{name,lines:[], fileNumber, lineNumber}});
   }
 
   function play_snippit(snippit) {
@@ -1086,7 +1102,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       fileNumber=part.fileNumber;
       for (let line of part.lines) {
         lineNumber+=1;
-        assembleLine(line);
+        assembleTextLine(line);
       }
     }
   }
@@ -1100,14 +1116,15 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
 
   function parse_include() {
     let includeName = match(stringLiteral).replace(/(^["'])|(["']$)/g,'');
-    assembleFile(includeName);
+    parserContext.source.include(includeName);
+    parserContext.includeStack = parserContext.source.includeStack();
   }
 
   function parse_org() {
     var address =parse_intExpression();
     if ( (address < 0) || (address > 0x1ffff) ) fail("address out of range ");
     if ( (address & 1) === 1 ) fail("must be even numbered byte address ");
-    
+
     newChunk(address/2);
   }
 
@@ -1117,28 +1134,15 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
   }
 
   function parse_ifdef() {
-    parseModeStack.push(lineParser);
     let name = match(identifier);
-    lineParser =  definitions.hasOwnProperty(name)
-      ? ifdef_true
-      : ifdef_false;
+    parserContext.blockStack.push({type:"if", active:definitions.hasOwnProperty(name), elseSeen:false});
   }
 
   function parse_if() {
-    //note("parsing "+tokenList.tokenText);
     let expression = tokenList.tokenText.slice(4);
-    //expression= expression.replace(/\s/g,"");
-    //note("expression : ", expression );
-    let result = mathEvaluate(expression);    
-    //note("result:" + result);
-
-    parseModeStack.push(lineParser);
-    lineParser =  result
-      ? ifdef_true
-      : ifdef_false;
-    
+    let result = !!mathEvaluate(expression);
+    parserContext.blockStack.push({type:"if", active:result, elseSeen:false});
   }
-
 
   function parse_directive(kind) {
     switch (kind) {
@@ -1146,7 +1150,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
         parse_if();
         break;
       case ".ifdef":
-        parse_ifdef(); 
+        parse_ifdef();
         break;
       case ".def":
         parse_def();
@@ -1162,10 +1166,10 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
         parse_dw();
         break;
       case ".db":
-      case ".byte":      
+      case ".byte":
         parse_db();
         break;
-      case ".snip":      
+      case ".snip":
         start_snippit();
         break;
       case ".use":
@@ -1174,30 +1178,91 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       case ".org":
         parse_org();
         break;
-      case ".else":
-      case ".endif":
-          fail(kind+" widthout matching .if .ifdef ");
-          break;
+      case ".else": {
+        let block = parserContext.blockStack[parserContext.blockStack.length-1];
+        if (!block || block.type !== "if") fail(kind+" widthout matching .if .ifdef ");
+        if (block.elseSeen) fail("duplicate .else in conditional block");
+        block.elseSeen = true;
+        block.active = !block.active;
+      } break;
+      case ".endif": {
+        let block = parserContext.blockStack.pop();
+        if (!block || block.type !== "if") fail(kind+" widthout matching .if .ifdef ");
+      } break;
+      case ".endmacro": {
+        let block = parserContext.blockStack.pop();
+        if (!block || block.type !== "macro") fail(".endmacro without matching .macro");
+        macros[block.recordingMacro.name] = block.recordingMacro;
+      } break;
+      case ".endsnip": {
+        let block = parserContext.blockStack.pop();
+        if (!block || block.type !== "snip") fail(".endsnip without matching .snip");
+        let name = block.recordingSnippit.name;
+        if (!snippits.hasOwnProperty(name)) snippits[name] = [];
+        snippits[name].push(block.recordingSnippit);
+      } break;
       case ".note":
-          note(tokenList.text.slice(tokenList.text.indexOf(".note")+6));
+        note(tokenList.text.slice(tokenList.text.indexOf(".note")+6));
         break;
       case ".report": {
-          let line= tokenList.slice(1).map(a=>a.value).join(" ");
-          note(line);
-        } break;  
+        let line= tokenList.slice(1).map(a=>a.value).join(" ");
+        note(line);
+      } break;
       case ".fail":
-          fail(tokenList.text.slice(tokenList.text.indexOf(".fail")+6));
-          break; 
+        fail(tokenList.text.slice(tokenList.text.indexOf(".fail")+6));
+        break;
       default:
         fail("directive "+kind+" not implemented yet");
     }
 
   }
-  function parse_standard_line(line) {
-    var t = tokenizeLine(line,definitions);    
-    useTokens(t);     
+
+  function currentBlock() {
+    return parserContext.blockStack[parserContext.blockStack.length-1] || null;
+  }
+
+  function shouldAssembleLine() {
+    return !parserContext.blockStack.some(a=>a.type==="if" && !a.active);
+  }
+
+  function parse_standard_line(sourceLine) {
+    tokenList = sourceLine.tokens;
+    useTokens(tokenList);
+
+    let block = currentBlock();
+    if (block && block.type === "macro") {
+      if (look.token === directive && look.value === ".endmacro") {
+        parse_directive(match(directive));
+      } else {
+        block.recordingMacro.lines.push(sourceLine.text);
+      }
+      return;
+    }
+
+    if (block && block.type === "snip") {
+      if (look.token === directive && look.value === ".endsnip") {
+        parse_directive(match(directive));
+      } else {
+        block.recordingSnippit.lines.push(sourceLine.text);
+      }
+      return;
+    }
+
+    let active = shouldAssembleLine();
+    if (!active) {
+      if (look.token === directive) {
+        let k = look.value;
+        if (k === ".if" || k === ".ifdef") {
+          parserContext.blockStack.push({type:"if", active:false, elseSeen:false});
+        } else if (k === ".else" || k === ".endif") {
+          parse_directive(match(directive));
+        }
+      }
+      return;
+    }
+
     switch(look.token) {
-      case directive: 
+      case directive:
         parse_directive(match(directive));
         return;
       case label:
@@ -1205,110 +1270,75 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
         addLabel(look.value.slice(0,-1));
         match(label);
       break;
-    case local:
+      case local:
         wordAlign();
         addLocalLabel(look.value.slice(0,-1));
         match(local);
       break;
     }
-    parse_asm();    
+    parse_asm();
   }
 
-  function ifdef_true(line) {
-    switch(line.trim()) {
-      case ".endif":  
-        lineParser=parseModeStack.pop();
-        break;
-      case ".else":
-        lineParser=ifdef_true_else;
-        break;
-      default:  parse_standard_line(line);
-    }
-  }
-
-  function ifdef_true_else(line) {
-    if (line.trim()===".endif")  lineParser=parseModeStack.pop();
-  }
-
-  function ifdef_false_else(line) {
-    if (line.trim()===".endif") {
-      lineParser=parseModeStack.pop();
-    } else {
-      parse_standard_line(line);
-    }
-  }
-
-  function ifdef_false(line) {
-    switch(line.trim()) {
-      case ".endif":  
-        lineParser=parseModeStack.pop();
-        break;
-      case ".else":
-        lineParser= ifdef_false_else;
-    }
-  }
-
-  
-  function assembleLine(line) {
+  function assembleSourceLine(sourceLine) {
+    ({lineNumber,fileNumber}=sourceLine);
+    parserContext.includeStack = parserContext.source.includeStack();
     debugInfo.addressMap[currentCodePosition()]={lineNumber,fileNumber};
-    lineParser(line);
+    parse_standard_line(sourceLine);
   }
 
-  function assembleLines(lines) {
-    for (let line of lines) {
+  function assembleTextLine(text) {
+    let activeFile = debugInfo.fileList[fileNumber] || "<macro>";
+    assembleSourceLine({
+      filename: activeFile,
+      fileNumber,
+      lineNumber,
+      text,
+      tokens: tokenizeLine(text,definitions)
+    });
+  }
+
+  function parseSourceStream() {
+    while (true) {
+      let sourceLine = parserContext.source.next();
+      if (!sourceLine) break;
       try {
-        assembleLine(line);      
-        lineNumber+=1;
+        assembleSourceLine(sourceLine);
       }
-      catch (e)  {
-        let filename = debugInfo.fileList[fileNumber];
-        error("error in "+filename+" on line "+ lineNumber+":  "+e.message,{filename,lineNumber});
+      catch (e) {
+        let filename = sourceLine.filename;
+        error("error in "+filename+" on line "+ sourceLine.lineNumber+":  "+e.message,{filename,lineNumber:sourceLine.lineNumber});
         throw e;
       }
-    } 
-    if (lineParser === record_macro_line)  {
-      let filename = debugInfo.fileList[fileNumber];
-      error("reached end of file while in macro: ",{filename,lineNumber:recordingMacro.lineNumber});      
     }
-    if (lineParser === record_snippit_line)  {
-      let filename = debugInfo.fileList[fileNumber];
-      error("reached end of file while in snippit: ",{filename,lineNumber:recordingSnippit.lineNumber});      
+
+    let dangling = currentBlock();
+    if (!dangling) return;
+    let filename = debugInfo.fileList[fileNumber];
+    if (dangling.type === "macro") {
+      error("reached end of file while in macro: ",{filename,lineNumber:dangling.recordingMacro.lineNumber});
+      return;
     }
-  }
-  function loadFile(filename) {
-    try {
-      return loadFn(filename);
-    } catch (e) {
-      fail("Could not load file "+ filename);
+    if (dangling.type === "snip") {
+      error("reached end of file while in snippit: ",{filename,lineNumber:dangling.recordingSnippit.lineNumber});
+      return;
     }
-  }
-  function assembleFile(filename) {
-    let lines = loadFile(filename).split('\n');
-    let store = [lineNumber,fileNumber];
-    //note("assembling "+filename);
-    debugInfo.fileList.push(filename);
-    fileNumber=debugInfo.fileList.length-1;
-    lineNumber=1;
-    assembleLines(lines);
-    [lineNumber,fileNumber] = store;
+    error("reached end of file while in conditional block: ",{filename,lineNumber});
   }
 
   function doPass(passNum=1) {
-    //note("pass: "+passNum);
     pass=passNum;
 
     initPass();
-    
-    assembleFile(mainFilename);
+    parseSourceStream();
 
     try {
-       usedSnippits.forEach(play_snippit) 
+       usedSnippits.forEach(play_snippit)
     }
     catch (e)  {
       let filename = debugInfo.fileList[fileNumber];
       error("error in "+filename+" on line "+ lineNumber+":  "+e.message,{filename,lineNumber});
       throw e;
-    }           
+    }
   }
 
   instructions.LD={parse:parse_ld};
