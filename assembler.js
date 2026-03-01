@@ -1029,7 +1029,31 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     parserContext.blockStack.push({
       kind:"macro",
       openedAt:{fileNumber,lineNumber},
-      payload:{recordingMacro:{name,parameters,lineNumber,lines:[]}}
+      payload:{recordingMacro:{name,parameters,lineNumber,segments:[]}}
+    });
+  }
+
+  function record_macro_line(macro, sourceLine) {
+    macro.segments.push({
+      text: sourceLine.text,
+      tokens: sourceLine.tokens,
+      lineNumber: sourceLine.lineNumber,
+      fileNumber: sourceLine.fileNumber
+    });
+  }
+
+  function replay_segment(segment) {
+    let text = segment.text;
+    let tokens = segment.tokens;
+    if (!tokens) {
+      tokens = tokenizeLine(text,definitions);
+    }
+    assembleSourceLine({
+      filename: debugInfo.fileList[segment.fileNumber] || "<macro>",
+      fileNumber: segment.fileNumber,
+      lineNumber: segment.lineNumber,
+      text,
+      tokens
     });
   }
 
@@ -1037,7 +1061,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     if (macro.parameters.length === 0) {
       match(endToken);
       macroStack.push(macro.name);
-      macro.lines.forEach(line=>assembleTextLine(line));
+      macro.segments.forEach(replay_segment);
       macroStack.pop();
       return;
     }
@@ -1079,14 +1103,14 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     }
     macroStack.push(macro.name);
     let rx = new RegExp("\\b("+macro.parameters.join("|")+")\\b","g");
-    for (let macroLine of macro.lines) {
-      let translatedLine = macroLine.replace(rx,match=>parameters[match]);
+    for (let segment of macro.segments) {
+      let translatedLine = segment.text.replace(rx,match=>parameters[match]);
       try {
-        assembleTextLine(translatedLine);
+        replay_segment({...segment,text:translatedLine,tokens:null});
       }
       catch (e) {
         note("macro translated line");
-        note("from:" +macroLine);
+        note("from:" +segment.text);
         note("to  :" +translatedLine);
         throw e;
       }
@@ -1100,18 +1124,22 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     parserContext.blockStack.push({
       kind:"snip",
       openedAt:{fileNumber,lineNumber},
-      payload:{recordingSnippit:{name,lines:[], fileNumber, lineNumber}}
+      payload:{recordingSnippit:{name,segments:[], fileNumber, lineNumber}}
+    });
+  }
+
+  function record_snippit_line(snippit, sourceLine) {
+    snippit.segments.push({
+      text: sourceLine.text,
+      tokens: sourceLine.tokens,
+      lineNumber: sourceLine.lineNumber,
+      fileNumber: sourceLine.fileNumber
     });
   }
 
   function play_snippit(snippit) {
     for (let part of snippit) {
-      lineNumber=part.lineNumber;
-      fileNumber=part.fileNumber;
-      for (let line of part.lines) {
-        lineNumber+=1;
-        assembleTextLine(line);
-      }
+      part.segments.forEach(replay_segment);
     }
   }
 
@@ -1280,7 +1308,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       if (look.token === directive && look.value === ".endmacro") {
         parse_directive(match(directive));
       } else {
-        block.payload.recordingMacro.lines.push(sourceLine.text);
+        record_macro_line(block.payload.recordingMacro, sourceLine);
       }
       return;
     }
@@ -1289,7 +1317,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       if (look.token === directive && look.value === ".endsnip") {
         parse_directive(match(directive));
       } else {
-        block.payload.recordingSnippit.lines.push(sourceLine.text);
+        record_snippit_line(block.payload.recordingSnippit, sourceLine);
       }
       return;
     }
