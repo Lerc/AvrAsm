@@ -1026,7 +1026,11 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
         }
       }
     }
-    parserContext.blockStack.push({type:"macro", recordingMacro:{name,parameters,lineNumber,lines:[]}});
+    parserContext.blockStack.push({
+      kind:"macro",
+      openedAt:{fileNumber,lineNumber},
+      payload:{recordingMacro:{name,parameters,lineNumber,lines:[]}}
+    });
   }
 
   function play_macro(macro) {
@@ -1093,7 +1097,11 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
   function start_snippit() {
     let name = match(identifier);
     match(endToken);
-    parserContext.blockStack.push({type:"snip", recordingSnippit:{name,lines:[], fileNumber, lineNumber}});
+    parserContext.blockStack.push({
+      kind:"snip",
+      openedAt:{fileNumber,lineNumber},
+      payload:{recordingSnippit:{name,lines:[], fileNumber, lineNumber}}
+    });
   }
 
   function play_snippit(snippit) {
@@ -1135,86 +1143,124 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
 
   function parse_ifdef() {
     let name = match(identifier);
-    parserContext.blockStack.push({type:"if", active:definitions.hasOwnProperty(name), elseSeen:false});
+    parserContext.blockStack.push({
+      kind:"if",
+      openedAt:{fileNumber,lineNumber},
+      payload:{active:definitions.hasOwnProperty(name), elseSeen:false}
+    });
   }
 
   function parse_if() {
     let expression = tokenList.tokenText.slice(4);
     let result = !!mathEvaluate(expression);
-    parserContext.blockStack.push({type:"if", active:result, elseSeen:false});
+    parserContext.blockStack.push({
+      kind:"if",
+      openedAt:{fileNumber,lineNumber},
+      payload:{active:result, elseSeen:false}
+    });
   }
 
-  function parse_directive(kind) {
+  function parseCloseDirective(kind) {
+    let expectedKind = {
+      ".endif": "if",
+      ".endmacro": "macro",
+      ".endsnip": "snip"
+    }[kind];
+
+    let block = parserContext.blockStack.pop();
+    if (!block) {
+      fail(kind+" without matching ."+expectedKind);
+    }
+
+    if (block.kind !== expectedKind) {
+      fail(kind+" closes ."+expectedKind+" but top of stack is ."+block.kind);
+    }
+
+    if (kind === ".endmacro") {
+      macros[block.payload.recordingMacro.name] = block.payload.recordingMacro;
+    }
+    if (kind === ".endsnip") {
+      let name = block.payload.recordingSnippit.name;
+      if (!snippits.hasOwnProperty(name)) snippits[name] = [];
+      snippits[name].push(block.payload.recordingSnippit);
+    }
+  }
+
+  function parse_structuralDirective(kind) {
     switch (kind) {
       case ".if":
         parse_if();
-        break;
+        return;
       case ".ifdef":
         parse_ifdef();
-        break;
-      case ".def":
-        parse_def();
-        break;
+        return;
+      case ".else": {
+        let block = parserContext.blockStack[parserContext.blockStack.length-1];
+        if (!block) fail(".else without matching .if .ifdef");
+        if (block.kind !== "if") {
+          fail(".else expected top block .if but found ."+block.kind);
+        }
+        if (block.payload.elseSeen) fail("duplicate .else in conditional block");
+        block.payload.elseSeen = true;
+        block.payload.active = !block.payload.active;
+        return;
+      }
+      case ".endif":
+      case ".endmacro":
+      case ".endsnip":
+        parseCloseDirective(kind);
+        return;
       case ".macro":
         start_macro();
-        break;
+        return;
+      case ".snip":
+        start_snippit();
+        return;
+    }
+    return false;
+  }
+
+  function parse_nonStructuralDirective(kind) {
+    switch (kind) {
+      case ".def":
+        parse_def();
+        return true;
       case ".include":
         parse_include();
-        break;
+        return true;
+      case ".org":
+        parse_org();
+        return true;
       case ".dw":
       case ".word":
         parse_dw();
-        break;
+        return true;
       case ".db":
       case ".byte":
         parse_db();
-        break;
-      case ".snip":
-        start_snippit();
-        break;
+        return true;
       case ".use":
         use_snippit(match(identifier));
-        break;
-      case ".org":
-        parse_org();
-        break;
-      case ".else": {
-        let block = parserContext.blockStack[parserContext.blockStack.length-1];
-        if (!block || block.type !== "if") fail(kind+" widthout matching .if .ifdef ");
-        if (block.elseSeen) fail("duplicate .else in conditional block");
-        block.elseSeen = true;
-        block.active = !block.active;
-      } break;
-      case ".endif": {
-        let block = parserContext.blockStack.pop();
-        if (!block || block.type !== "if") fail(kind+" widthout matching .if .ifdef ");
-      } break;
-      case ".endmacro": {
-        let block = parserContext.blockStack.pop();
-        if (!block || block.type !== "macro") fail(".endmacro without matching .macro");
-        macros[block.recordingMacro.name] = block.recordingMacro;
-      } break;
-      case ".endsnip": {
-        let block = parserContext.blockStack.pop();
-        if (!block || block.type !== "snip") fail(".endsnip without matching .snip");
-        let name = block.recordingSnippit.name;
-        if (!snippits.hasOwnProperty(name)) snippits[name] = [];
-        snippits[name].push(block.recordingSnippit);
-      } break;
+        return true;
       case ".note":
         note(tokenList.text.slice(tokenList.text.indexOf(".note")+6));
-        break;
+        return true;
       case ".report": {
         let line= tokenList.slice(1).map(a=>a.value).join(" ");
         note(line);
-      } break;
+        return true;
+      }
       case ".fail":
         fail(tokenList.text.slice(tokenList.text.indexOf(".fail")+6));
-        break;
-      default:
-        fail("directive "+kind+" not implemented yet");
+        return true;
     }
+    return false;
+  }
 
+  function parse_directive(kind) {
+    if (parse_structuralDirective(kind) !== false) return;
+    if (parse_nonStructuralDirective(kind)) return;
+    fail("directive "+kind+" not implemented yet");
   }
 
   function currentBlock() {
@@ -1222,7 +1268,7 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
   }
 
   function shouldAssembleLine() {
-    return !parserContext.blockStack.some(a=>a.type==="if" && !a.active);
+    return !parserContext.blockStack.some(a=>a.kind==="if" && !a.payload.active);
   }
 
   function parse_standard_line(sourceLine) {
@@ -1230,20 +1276,20 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     useTokens(tokenList);
 
     let block = currentBlock();
-    if (block && block.type === "macro") {
+    if (block && block.kind === "macro") {
       if (look.token === directive && look.value === ".endmacro") {
         parse_directive(match(directive));
       } else {
-        block.recordingMacro.lines.push(sourceLine.text);
+        block.payload.recordingMacro.lines.push(sourceLine.text);
       }
       return;
     }
 
-    if (block && block.type === "snip") {
+    if (block && block.kind === "snip") {
       if (look.token === directive && look.value === ".endsnip") {
         parse_directive(match(directive));
       } else {
-        block.recordingSnippit.lines.push(sourceLine.text);
+        block.payload.recordingSnippit.lines.push(sourceLine.text);
       }
       return;
     }
@@ -1253,7 +1299,11 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
       if (look.token === directive) {
         let k = look.value;
         if (k === ".if" || k === ".ifdef") {
-          parserContext.blockStack.push({type:"if", active:false, elseSeen:false});
+          parserContext.blockStack.push({
+            kind:"if",
+            openedAt:{fileNumber,lineNumber},
+            payload:{active:false, elseSeen:false}
+          });
         } else if (k === ".else" || k === ".endif") {
           parse_directive(match(directive));
         }
@@ -1314,12 +1364,12 @@ function assemble(mainFilename, loadFn, errorfn=console.log, notefn=console.log)
     let dangling = currentBlock();
     if (!dangling) return;
     let filename = debugInfo.fileList[fileNumber];
-    if (dangling.type === "macro") {
-      error("reached end of file while in macro: ",{filename,lineNumber:dangling.recordingMacro.lineNumber});
+    if (dangling.kind === "macro") {
+      error("reached end of file while in macro: ",{filename,lineNumber:dangling.payload.recordingMacro.lineNumber});
       return;
     }
-    if (dangling.type === "snip") {
-      error("reached end of file while in snippit: ",{filename,lineNumber:dangling.recordingSnippit.lineNumber});
+    if (dangling.kind === "snip") {
+      error("reached end of file while in snippit: ",{filename,lineNumber:dangling.payload.recordingSnippit.lineNumber});
       return;
     }
     error("reached end of file while in conditional block: ",{filename,lineNumber});
